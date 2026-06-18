@@ -135,11 +135,15 @@ fn read_clipboard() -> Result<ClipSnapshot> {
 /// when at least one file is on the clipboard, otherwise None.
 #[cfg(windows)]
 fn read_files_windows() -> Option<Vec<String>> {
-    use clipboard_win::{formats, get_clipboard};
-    // Tries to lock the clipboard a few times to avoid races with other apps.
-    match get_clipboard(formats::FileList) {
-        Ok(list) if !list.is_empty() => Some(list),
-        _ => None,
+    use clipboard_win::{formats, Clipboard, Getter};
+    // Acquire the Windows clipboard lock (a few attempts to avoid races).
+    let _lock = Clipboard::new_attempts(10).ok()?;
+    let mut list: Vec<String> = Vec::new();
+    formats::FileList.read_clipboard(&mut list).ok()?;
+    if list.is_empty() {
+        None
+    } else {
+        Some(list)
     }
 }
 
@@ -406,8 +410,11 @@ pub fn write_image_png_b64(b64: &str) -> Result<()> {
 pub fn write_files(paths: &[String]) -> Result<()> {
     #[cfg(windows)]
     {
-        use clipboard_win::{formats, set_clipboard};
-        set_clipboard(formats::FileList, paths)
+        use clipboard_win::{formats, Clipboard, Setter};
+        let _lock = Clipboard::new_attempts(10)
+            .map_err(|e| anyhow::anyhow!("clipboard lock failed: {e:?}"))?;
+        formats::FileList
+            .write_clipboard(paths)
             .map_err(|e| anyhow::anyhow!("clipboard-win set failed: {e:?}"))?;
         return Ok(());
     }
