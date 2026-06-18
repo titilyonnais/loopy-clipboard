@@ -67,6 +67,27 @@ pub fn run() {
             // Register global shortcut
             register_shortcut(app.handle(), &settings.shortcut);
 
+            // Schedule periodic cleanup of expired entries (every hour).
+            // Also runs immediately on startup for instant feedback.
+            {
+                let db_cleanup = db.clone();
+                tauri::async_runtime::spawn(async move {
+                    loop {
+                        let cfg = db_cleanup.get_settings().unwrap_or_default();
+                        if cfg.auto_delete_days > 0 {
+                            if let Ok(n) = db_cleanup
+                                .cleanup_expired(cfg.auto_delete_days, cfg.keep_favorites)
+                            {
+                                if n > 0 {
+                                    log::info!("cleaned {n} expired clip(s)");
+                                }
+                            }
+                        }
+                        tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+                    }
+                });
+            }
+
             // First-launch UX: show window if no history yet
             if let Some(w) = app.get_webview_window("main") {
                 let total: i64 = db.stats().map(|s| s.total).unwrap_or(0);
@@ -89,6 +110,8 @@ pub fn run() {
             commands::update_category,
             commands::delete_clip,
             commands::clear_all,
+            commands::cleanup_now,
+            commands::get_histogram,
             commands::get_stats,
             commands::list_categories,
             commands::list_tags,

@@ -12,9 +12,14 @@ import {
   Play,
   Sparkles,
   Trash2,
+  Calendar,
+  Flame,
+  Sun,
+  History,
+  CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Stats } from "@/types";
+import type { Stats, TimeRange, SortMode } from "@/types";
 
 export type FilterKey =
   | "all"
@@ -29,6 +34,10 @@ export type FilterKey =
 interface SidebarProps {
   filter: FilterKey;
   setFilter: (k: FilterKey) => void;
+  timeRange: TimeRange;
+  setTimeRange: (t: TimeRange) => void;
+  sort: SortMode;
+  setSort: (s: SortMode) => void;
   stats: Stats | null;
   categories: string[];
   activeCategory: string | null;
@@ -46,6 +55,10 @@ const itemBase =
 export function Sidebar({
   filter,
   setFilter,
+  timeRange,
+  setTimeRange,
+  sort,
+  setSort,
   stats,
   categories,
   activeCategory,
@@ -70,6 +83,14 @@ export function Sidebar({
     { key: "file", label: "Fichiers", icon: File, count: stats?.file },
   ];
 
+  const timeRanges: { key: NonNullable<TimeRange>; label: string; icon: any }[] = [
+    { key: "today", label: "Aujourd'hui", icon: Sun },
+    { key: "yesterday", label: "Hier", icon: History },
+    { key: "week", label: "Cette semaine", icon: Calendar },
+    { key: "month", label: "Ce mois", icon: CalendarDays },
+    { key: "year", label: "Cette année", icon: CalendarDays },
+  ];
+
   return (
     <aside
       className="w-[232px] shrink-0 h-full border-r border-ink-700/60 bg-ink-900/40 flex flex-col"
@@ -79,7 +100,7 @@ export function Sidebar({
       <div className="px-5 pt-5 pb-3 flex items-center gap-2.5">
         <div className="relative">
           <div className="w-7 h-7 rounded-lg bg-lime-400 flex items-center justify-center shadow-[0_0_24px_-4px_rgba(190,242,100,0.6)]">
-            <Sparkles size={15} className="text-ink-900" strokeWidth={2.5} />
+            <Sparkles size={15} className="text-ink-950" strokeWidth={2.5} />
           </div>
         </div>
         <div className="leading-tight">
@@ -107,6 +128,31 @@ export function Sidebar({
                 label={it.label}
                 count={it.count}
                 testid={`nav-${it.key}`}
+              />
+            ))}
+            <NavBtn
+              onClick={() => setSort(sort === "popular" ? "recent" : "popular")}
+              active={sort === "popular"}
+              icon={Flame}
+              label="Populaires"
+              testid="nav-popular"
+            />
+          </div>
+        </div>
+
+        <div>
+          <SectionTitle>Calendrier</SectionTitle>
+          <div className="space-y-0.5 mt-1">
+            {timeRanges.map((tr) => (
+              <NavBtn
+                key={tr.key}
+                onClick={() =>
+                  setTimeRange(timeRange === tr.key ? null : tr.key)
+                }
+                active={timeRange === tr.key}
+                icon={tr.icon}
+                label={tr.label}
+                testid={`time-${tr.key}`}
               />
             ))}
           </div>
@@ -151,7 +197,7 @@ export function Sidebar({
                       : "text-ink-300 hover:bg-ink-800/60 hover:text-ink-100"
                   )}
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-lime-400/80" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-lime-500" />
                   <span className="truncate">{cat}</span>
                 </button>
               ))}
@@ -166,7 +212,7 @@ export function Sidebar({
           <span
             className={cn(
               "w-1.5 h-1.5 rounded-full",
-              aiOnline ? "bg-lime-400 animate-pulse-slow" : "bg-ink-500"
+              aiOnline ? "bg-lime-500 animate-pulse-slow" : "bg-ink-500"
             )}
           />
           <span className="text-ink-400">
@@ -183,7 +229,7 @@ export function Sidebar({
         </button>
         <button
           onClick={clearAll}
-          className={cn(itemBase, "text-ink-300 hover:bg-ink-800/60 hover:text-red-300")}
+          className={cn(itemBase, "text-ink-300 hover:bg-ink-800/60 hover:text-red-400")}
           data-testid="clear-all-btn"
         >
           <Trash2 size={14} />
@@ -236,7 +282,7 @@ function NavBtn({
           : "text-ink-300 hover:bg-ink-800/60 hover:text-ink-100"
       )}
     >
-      <Icon size={14} className={active ? "text-lime-400" : ""} />
+      <Icon size={14} className={active ? "text-lime-500" : ""} />
       <span className="flex-1 truncate">{label}</span>
       {typeof count === "number" && (
         <span className="text-[10.5px] font-mono text-ink-500 tabular-nums">

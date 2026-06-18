@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api } from "@/lib/api";
-import type { ClipItem, Stats, Settings as SettingsT } from "@/types";
+import type {
+  ClipItem,
+  Stats,
+  Settings as SettingsT,
+  TimeRange,
+  SortMode,
+} from "@/types";
 import { SearchBar } from "@/components/SearchBar";
 import { Sidebar, type FilterKey } from "@/components/Sidebar";
 import { ClipListItem } from "@/components/ClipListItem";
@@ -11,6 +17,8 @@ import { Settings } from "@/components/Settings";
 export default function App() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [timeRange, setTimeRange] = useState<TimeRange>(null);
+  const [sort, setSort] = useState<SortMode>("recent");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [clips, setClips] = useState<ClipItem[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -41,9 +49,16 @@ export default function App() {
     return () => clearInterval(t);
   }, []);
 
-  // Apply theme on settings change
+  // Apply theme when settings change & react to OS preference for "auto"
   useEffect(() => {
-    if (settings) applyTheme(settings.theme);
+    if (!settings) return;
+    applyTheme(settings.theme);
+    if (settings.theme === "auto") {
+      const mq = window.matchMedia("(prefers-color-scheme: light)");
+      const handler = () => applyTheme("auto");
+      mq.addEventListener("change", handler);
+      return () => mq.removeEventListener("change", handler);
+    }
   }, [settings?.theme]);
 
   // Fetch list
@@ -56,6 +71,8 @@ export default function App() {
       category: activeCategory || null,
       pinned_only: filter === "pinned",
       favorites_only: filter === "favorites",
+      time_range: timeRange,
+      sort,
       limit: 500,
       offset: 0,
     });
@@ -66,20 +83,17 @@ export default function App() {
     if (!list.length) setSelectedId(null);
     api.stats().then(setStats);
     api.categories().then(setCategories);
-  }, [query, filter, activeCategory, selectedId]);
+  }, [query, filter, activeCategory, timeRange, sort, selectedId]);
 
   useEffect(() => {
     refresh();
-  }, [query, filter, activeCategory]);
+  }, [query, filter, activeCategory, timeRange, sort]);
 
   // Listen to clipboard events from Rust side
   useEffect(() => {
     const un = listen<ClipItem>("clip:new", () => refresh());
     const un2 = listen<{ id: number }>("clip:updated", () => refresh());
-    const un3 = listen<{}>("window:show", () => {
-      // refresh on show
-      refresh();
-    });
+    const un3 = listen<{}>("window:show", () => refresh());
     return () => {
       un.then((f) => f());
       un2.then((f) => f());
@@ -160,11 +174,30 @@ export default function App() {
     refresh();
   };
 
+  const activeFilterLabel = useMemo(() => {
+    if (timeRange) {
+      const labels: Record<NonNullable<TimeRange>, string> = {
+        today: "Aujourd'hui",
+        yesterday: "Hier",
+        week: "Cette semaine",
+        month: "Ce mois",
+        year: "Cette année",
+      };
+      return labels[timeRange];
+    }
+    if (sort === "popular") return "Populaires";
+    return null;
+  }, [timeRange, sort]);
+
   return (
     <div className="h-screen w-screen flex overflow-hidden bg-ink-950" data-testid="app-root">
       <Sidebar
         filter={filter}
         setFilter={setFilter}
+        timeRange={timeRange}
+        setTimeRange={setTimeRange}
+        sort={sort}
+        setSort={setSort}
         stats={stats}
         categories={categories}
         activeCategory={activeCategory}
@@ -179,6 +212,27 @@ export default function App() {
       {/* List column */}
       <section className="w-[380px] shrink-0 h-full border-r border-ink-700/60 bg-ink-900/20 flex flex-col">
         <SearchBar value={query} onChange={setQuery} count={clips.length} />
+        {activeFilterLabel && (
+          <div
+            className="px-5 py-2 border-b border-ink-700/40 bg-ink-800/30 flex items-center gap-2"
+            data-testid="active-filter-bar"
+          >
+            <span className="text-[10.5px] uppercase tracking-wider text-ink-400 font-mono">
+              Filtre
+            </span>
+            <span className="text-[12px] text-ink-50 font-medium">{activeFilterLabel}</span>
+            <button
+              onClick={() => {
+                setTimeRange(null);
+                setSort("recent");
+              }}
+              className="ml-auto text-[11px] text-ink-400 hover:text-lime-500"
+              data-testid="clear-filter"
+            >
+              effacer
+            </button>
+          </div>
+        )}
         <div ref={listRef} className="flex-1 overflow-y-auto" data-testid="clip-list">
           {clips.length === 0 ? (
             <EmptyList query={query} monitorPaused={monitorPaused} />
@@ -205,7 +259,10 @@ export default function App() {
       <Settings
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        onSaved={(s) => setSettings(s)}
+        onSaved={(s) => {
+          setSettings(s);
+          applyTheme(s.theme);
+        }}
       />
     </div>
   );

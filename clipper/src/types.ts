@@ -39,6 +39,8 @@ export interface Settings {
   ignore_apps: string[];
   ollama_url: string;
   ollama_model: string;
+  auto_delete_days: number;     // 0 = never
+  keep_favorites: boolean;
 }
 
 export interface AIResponse {
@@ -46,3 +48,6 @@ export interface AIResponse {
   text: string;
   error?: string;
 }
+
+export type TimeRange = "today" | "yesterday" | "week" | "month" | "year" | null;
+export type SortMode = "recent" | "popular" | "oldest";

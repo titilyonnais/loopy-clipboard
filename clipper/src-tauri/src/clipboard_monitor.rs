@@ -20,6 +20,7 @@ pub fn start_monitor(app: AppHandle, db: Arc<Db>, initial_paused: bool) -> Monit
     tauri::async_runtime::spawn(async move {
         let mut last_text_hash: Option<String> = None;
         let mut last_image_hash: Option<String> = None;
+        let mut last_files_hash: Option<String> = None;
         loop {
             // wait until not paused
             while *rx.borrow() {
@@ -32,6 +33,16 @@ pub fn start_monitor(app: AppHandle, db: Arc<Db>, initial_paused: bool) -> Monit
             let res = tokio::task::spawn_blocking(read_clipboard).await;
             if let Ok(Ok(snapshot)) = res {
                 match snapshot {
+                    ClipSnapshot::Files(paths) => {
+                        let joined = paths.join("\n");
+                        let h = hash_str(&format!("FILES:{}", joined));
+                        if Some(&h) != last_files_hash.as_ref() {
+                            last_files_hash = Some(h.clone());
+                            if let Err(e) = store_files(&db, &app, &paths, &h).await {
+                                log::warn!("store files failed: {e}");
+                            }
+                        }
+                    }
                     ClipSnapshot::Text(text) => {
                         let trimmed = text.trim();
                         if !trimmed.is_empty() {
@@ -76,17 +87,27 @@ struct ImageSnap {
 }
 
 enum ClipSnapshot {
+    #[allow(dead_code)] // constructed only on Windows via CF_HDROP
+    Files(Vec<String>),
     Text(String),
     Image(ImageSnap),
     None,
 }
 
 fn read_clipboard() -> Result<ClipSnapshot> {
+    // 1) Try files first (Windows Explorer: CF_HDROP)
+    #[cfg(windows)]
+    if let Some(files) = read_files_windows() {
+        if !files.is_empty() {
+            return Ok(ClipSnapshot::Files(files));
+        }
+    }
+
     let mut cb = match Clipboard::new() {
         Ok(c) => c,
         Err(_) => return Ok(ClipSnapshot::None),
     };
-    // Prefer text
+    // 2) Prefer text
     if let Ok(text) = cb.get_text() {
         if !text.is_empty() {
             return Ok(ClipSnapshot::Text(text));
@@ -108,6 +129,18 @@ fn read_clipboard() -> Result<ClipSnapshot> {
         }));
     }
     Ok(ClipSnapshot::None)
+}
+
+/// Read file paths from the Windows clipboard (CF_HDROP). Returns Some(paths)
+/// when at least one file is on the clipboard, otherwise None.
+#[cfg(windows)]
+fn read_files_windows() -> Option<Vec<String>> {
+    use clipboard_win::{formats, get_clipboard};
+    // Tries to lock the clipboard a few times to avoid races with other apps.
+    match get_clipboard(formats::FileList) {
+        Ok(list) if !list.is_empty() => Some(list),
+        _ => None,
+    }
 }
 
 async fn store_text(db: &Db, app: &AppHandle, text: &str, hash: &str) -> Result<()> {
@@ -170,6 +203,50 @@ async fn store_image(
         let _ = app.emit("clip:new", &item);
     }
     Ok(())
+}
+
+async fn store_files(db: &Db, app: &AppHandle, paths: &[String], hash: &str) -> Result<()> {
+    // Store the JSON list of paths as content (so we can re-emit them on copy),
+    // and build a friendly multi-line preview.
+    let content = serde_json::to_string(paths)?;
+    let preview = build_files_preview(paths);
+    let size: i64 = paths.iter().map(|p| p.len() as i64).sum::<i64>() + 8;
+    let hash_s = hash.to_string();
+    let preview_s = preview.clone();
+    let content_s = content.clone();
+    let db_c = db.clone();
+    let inserted = tokio::task::spawn_blocking(move || {
+        db_c.insert_clip("file", &content_s, &preview_s, None, None, size, &hash_s)
+    })
+    .await??;
+    if let Some(item) = inserted {
+        let _ = app.emit("clip:new", &item);
+    }
+    Ok(())
+}
+
+fn build_files_preview(paths: &[String]) -> String {
+    let count = paths.len();
+    if count == 0 {
+        return "(aucun fichier)".into();
+    }
+    let head: Vec<&str> = paths
+        .iter()
+        .take(3)
+        .map(|p| {
+            std::path::Path::new(p)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(p.as_str())
+        })
+        .collect();
+    if count == 1 {
+        format!("📄 {}", head[0])
+    } else if count <= 3 {
+        format!("📄 {} ({})", head.join(", "), count)
+    } else {
+        format!("📄 {} … (+{} autres)", head.join(", "), count - 3)
+    }
 }
 
 fn make_preview(text: &str) -> String {
@@ -321,4 +398,23 @@ pub fn write_image_png_b64(b64: &str) -> Result<()> {
         bytes: img.into_raw().into(),
     })?;
     Ok(())
+}
+
+/// Write a list of file paths back to the Windows clipboard so they can be
+/// pasted into Explorer/other apps. Falls back to writing the paths as text
+/// on non-Windows platforms.
+pub fn write_files(paths: &[String]) -> Result<()> {
+    #[cfg(windows)]
+    {
+        use clipboard_win::{formats, set_clipboard};
+        set_clipboard(formats::FileList, paths)
+            .map_err(|e| anyhow::anyhow!("clipboard-win set failed: {e:?}"))?;
+        return Ok(());
+    }
+    #[cfg(not(windows))]
+    {
+        // Fallback for non-Windows builds (mainly used for cargo check on Linux/macOS)
+        write_text(&paths.join("\n"))?;
+        Ok(())
+    }
 }

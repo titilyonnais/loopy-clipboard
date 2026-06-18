@@ -42,6 +42,16 @@ pub struct Settings {
     pub ignore_apps: Vec<String>,
     pub ollama_url: String,
     pub ollama_model: String,
+    /// Auto-delete items older than N days. 0 = never auto-delete.
+    #[serde(default)]
+    pub auto_delete_days: i64,
+    /// When auto-deleting, keep favorites too (pinned items are always kept).
+    #[serde(default = "default_true")]
+    pub keep_favorites: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for Settings {
@@ -55,6 +65,8 @@ impl Default for Settings {
             ignore_apps: vec![],
             ollama_url: "http://localhost:11434".into(),
             ollama_model: "llama3.2:3b".into(),
+            auto_delete_days: 0,
+            keep_favorites: true,
         }
     }
 }
@@ -68,6 +80,10 @@ pub struct ListParams {
     pub tag: Option<String>,
     pub pinned_only: bool,
     pub favorites_only: bool,
+    /// "today" | "yesterday" | "week" | "month" | "year" | "YYYY-MM-DD"
+    pub time_range: Option<String>,
+    /// "recent" (default) | "popular" | "oldest"
+    pub sort: Option<String>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
 }

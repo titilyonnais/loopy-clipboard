@@ -1,5 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ClipItem, Stats, Settings, AIResponse } from "@/types";
+import type {
+  ClipItem,
+  Stats,
+  Settings,
+  AIResponse,
+  SortMode,
+  TimeRange,
+} from "@/types";
 
 export const api = {
   list: (params: {
@@ -9,6 +16,8 @@ export const api = {
     tag?: string | null;
     pinned_only?: boolean;
     favorites_only?: boolean;
+    time_range?: TimeRange | string | null;
+    sort?: SortMode;
     limit?: number;
     offset?: number;
   }) => invoke<ClipItem[]>("list_clips", { params }),
@@ -33,6 +42,11 @@ export const api = {
 
   clearAll: (keep_pinned: boolean) =>
     invoke<number>("clear_all", { keepPinned: keep_pinned }),
+
+  cleanupNow: () => invoke<number>("cleanup_now"),
+
+  histogram: (days: number = 30) =>
+    invoke<[string, number][]>("get_histogram", { days }),
 
   stats: () => invoke<Stats>("get_stats"),
 

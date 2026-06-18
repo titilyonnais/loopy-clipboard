@@ -1,5 +1,5 @@
 use crate::ai;
-use crate::clipboard_monitor::{write_image_png_b64, write_text, MonitorHandle};
+use crate::clipboard_monitor::{write_files, write_image_png_b64, write_text, MonitorHandle};
 use crate::db::Db;
 use crate::models::{AIResponse, ClipItem, ListParams, Settings, Stats};
 use base64::Engine;
@@ -34,6 +34,9 @@ pub fn copy_to_clipboard(
         .ok_or_else(|| "Clip introuvable".to_string())?;
     if clip.kind == "image" {
         write_image_png_b64(&clip.content).map_err(|e| e.to_string())?;
+    } else if clip.kind == "file" {
+        let paths: Vec<String> = serde_json::from_str(&clip.content).unwrap_or_default();
+        write_files(&paths).map_err(|e| e.to_string())?;
     } else {
         write_text(&clip.content).map_err(|e| e.to_string())?;
     }
@@ -112,6 +115,26 @@ pub fn delete_clip(id: i64, state: State<'_, AppState>) -> Result<(), String> {
 #[tauri::command]
 pub fn clear_all(keep_pinned: bool, state: State<'_, AppState>) -> Result<usize, String> {
     state.db.clear_all(keep_pinned).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn cleanup_now(state: State<'_, AppState>) -> Result<usize, String> {
+    let s = state.db.get_settings().map_err(|e| e.to_string())?;
+    state
+        .db
+        .cleanup_expired(s.auto_delete_days, s.keep_favorites)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_histogram(
+    days: Option<i64>,
+    state: State<'_, AppState>,
+) -> Result<Vec<(String, i64)>, String> {
+    state
+        .db
+        .histogram(days.unwrap_or(30))
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

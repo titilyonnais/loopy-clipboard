@@ -4,10 +4,54 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ───────────────────────── Theme tokens ───────────────────────── */
+
 :root {
-  color-scheme: dark light;
+  color-scheme: dark;
   --grain-opacity: 0.025;
+
+  /* Dark theme (default) — ascending = brighter foreground */
+  --ink-50: 245 245 246;
+  --ink-100: 229 229 231;
+  --ink-200: 200 200 204;
+  --ink-300: 165 165 171;
+  --ink-400: 117 117 124;
+  --ink-500: 82 82 90;
+  --ink-600: 58 58 64;
+  --ink-700: 39 39 43;
+  --ink-800: 26 26 29;
+  --ink-850: 19 19 22;
+  --ink-900: 13 13 16;
+  --ink-950: 8 8 10;
+
+  --bg-base: 8 8 10;            /* body */
+  --accent: 163 230 53;         /* lime-500 */
+  --hl-stylesheet: dark;
 }
+
+.light {
+  color-scheme: light;
+  --grain-opacity: 0.04;
+
+  /* Light theme — palette inverted with carefully chosen warm grays */
+  --ink-50: 13 13 16;           /* primary text */
+  --ink-100: 24 24 27;
+  --ink-200: 39 39 42;
+  --ink-300: 82 82 91;          /* secondary text */
+  --ink-400: 113 113 122;       /* tertiary text */
+  --ink-500: 161 161 170;       /* muted */
+  --ink-600: 212 212 216;
+  --ink-700: 228 228 231;       /* borders */
+  --ink-800: 244 244 245;       /* subtle bg / hovers */
+  --ink-850: 248 248 249;
+  --ink-900: 253 253 253;       /* secondary panel */
+  --ink-950: 255 255 255;       /* primary bg */
+
+  --bg-base: 250 250 251;
+  --accent: 132 204 22;         /* slightly deeper lime for contrast on light */
+}
+
+/* ───────────────────────── Base ───────────────────────── */
 
 html,
 body,
@@ -24,13 +68,13 @@ body {
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #08080a;
-  color: #f5f5f6;
+  background: rgb(var(--bg-base));
+  color: rgb(var(--ink-50));
   overflow: hidden;
   user-select: none;
 }
 
-/* Subtle film grain texture for depth */
+/* Subtle grain — different blend per theme */
 body::before {
   content: "";
   position: fixed;
@@ -41,14 +85,17 @@ body::before {
   mix-blend-mode: overlay;
   z-index: 9999;
 }
+.light body::before {
+  mix-blend-mode: multiply;
+}
 
 /* Selection */
 ::selection {
-  background: rgba(190, 242, 100, 0.25);
-  color: #f5f5f6;
+  background: rgb(var(--accent) / 0.28);
+  color: rgb(var(--ink-50));
 }
 
-/* Scrollbars — minimal and accent-aware */
+/* Scrollbars */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -57,18 +104,17 @@ body::before {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #27272b;
+  background: rgb(var(--ink-700));
   border-radius: 6px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #3a3a40;
+  background: rgb(var(--ink-600));
   background-clip: padding-box;
   border: 2px solid transparent;
 }
 
-/* Inputs cleanup */
 input,
 textarea,
 button {
@@ -76,7 +122,6 @@ button {
   outline: none;
 }
 
-/* Make sure code blocks look great */
 pre,
 code {
   font-family: "Geist Mono", ui-monospace, monospace;
@@ -88,35 +133,56 @@ code {
   padding: 0 !important;
 }
 
-/* Allow text selection inside content blocks */
+/* In light mode, swap to a light highlight scheme */
+.light .hljs {
+  color: #24292f;
+}
+.light .hljs-keyword,
+.light .hljs-tag,
+.light .hljs-built_in,
+.light .hljs-selector-tag {
+  color: #cf222e;
+}
+.light .hljs-string,
+.light .hljs-attr {
+  color: #0a3069;
+}
+.light .hljs-number,
+.light .hljs-literal,
+.light .hljs-symbol {
+  color: #0550ae;
+}
+.light .hljs-comment,
+.light .hljs-meta {
+  color: #6e7781;
+  font-style: italic;
+}
+.light .hljs-title,
+.light .hljs-name,
+.light .hljs-function {
+  color: #8250df;
+}
+
+/* selectable inside content */
 .selectable,
 .selectable * {
   user-select: text;
   cursor: text;
 }
 
-/* Glass panel */
+/* Glass panels — theme aware */
 .glass {
-  background: rgba(19, 19, 22, 0.72);
+  background: rgb(var(--ink-900) / 0.72);
   backdrop-filter: saturate(140%) blur(18px);
   -webkit-backdrop-filter: saturate(140%) blur(18px);
 }
-
-/* Light mode overrides */
-.light body {
-  background: #fafafa;
-  color: #0d0d10;
-}
-.light ::-webkit-scrollbar-thumb {
-  background: #d4d4d8;
-}
-.light ::-webkit-scrollbar-thumb:hover {
-  background: #a1a1aa;
+.light .glass {
+  background: rgb(255 255 255 / 0.82);
 }
 
 /* Focus ring */
 .focus-ring:focus-visible {
-  box-shadow: 0 0 0 2px rgba(190, 242, 100, 0.45);
+  box-shadow: 0 0 0 2px rgb(var(--accent) / 0.5);
 }
 
 /* Keyboard hint */
@@ -126,10 +192,10 @@ kbd {
   line-height: 1;
   padding: 3px 6px;
   border-radius: 5px;
-  background: #1a1a1d;
-  border: 1px solid #27272b;
-  color: #a5a5ab;
-  box-shadow: 0 1px 0 #0d0d10;
+  background: rgb(var(--ink-800));
+  border: 1px solid rgb(var(--ink-700));
+  color: rgb(var(--ink-300));
+  box-shadow: 0 1px 0 rgb(var(--ink-900));
 }
 
 /* Smooth transitions for theme toggle */
@@ -139,7 +205,6 @@ kbd {
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Disable transition on initial paint */
 .no-transition,
 .no-transition * {
   transition: none !important;

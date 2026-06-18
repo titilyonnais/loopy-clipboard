@@ -1,83 +1,88 @@
 # PRD — Clipper
 
 ## Problème
-Construire une application Windows 11 native moderne : gestionnaire de presse-papiers puissant avec historique permanent, recherche plein texte, catégories, et IA locale. Installable via .msi / .exe, ne déclenchant pas les antivirus, avec une interface moderne et minimaliste.
+Construire une application Windows 11 native moderne : gestionnaire de presse-papiers puissant avec historique permanent, recherche plein texte, catégories, et IA locale. Installable via .msi / .exe, ne déclenchant pas les antivirus, avec une interface moderne minimaliste.
 
 ## Stack
-- **Tauri 2** (Rust + WebView) — bundle Windows ~5–10 Mo, faux positifs antivirus minimaux
+- **Tauri 2** (Rust + WebView)
 - **Frontend** : React 18 + TypeScript + Vite 6 + Tailwind 3 + framer-motion + highlight.js + lucide-react
-- **Backend Rust** : SQLite (rusqlite + FTS5) · arboard (clipboard) · reqwest (Ollama) · tokio · sha2
+- **Backend Rust** : SQLite (rusqlite + FTS5) · arboard + clipboard-win (Windows CF_HDROP) · reqwest (Ollama) · tokio · sha2 · image
 - **Plugins Tauri** : global-shortcut, clipboard-manager, autostart, single-instance, notification, dialog, opener, tray-icon
+
+## Status
+✅ **MVP + iteration 1.1 livrée.** Compile sans erreur ni warning (Rust + TS).
+
+## Fonctionnalités (à jour)
+### Capture
+- [x] Texte (avec dédup SHA-256)
+- [x] Images (PNG, base64)
+- [x] **Fichiers depuis l'Explorateur Windows (CF_HDROP)** ← iter 1.1
+- [x] URLs (détection auto)
+- [x] Code avec détection langage (JSON, SQL, JS/TS, Rust, Python, HTML/CSS, Bash, XML…)
+
+### UI
+- [x] Sidebar : Bibliothèque (Tout / Épinglés / Favoris / Populaires)
+- [x] **Sidebar : Calendrier (Aujourd'hui / Hier / Semaine / Mois / Année)** ← iter 1.1
+- [x] Sidebar : Types + Catégories dynamiques
+- [x] Recherche plein texte FTS5 instantanée
+- [x] Preview avec coloration syntaxique
+- [x] **Preview pour fichiers** (liste avec icônes, chemins) ← iter 1.1
+- [x] Mode dark / light / auto
+- [x] **Light mode entièrement fonctionnel via CSS variables** ← fix iter 1.1
+- [x] **Ctrl au lieu de ⌘ (fix Windows)** ← fix iter 1.1
+- [x] Animations soignées, grain texture, glass effects
+
+### Actions
+- [x] Copier / Trim / lower / UPPER / JSON escape / URL encode / Base64
+- [x] **Copier fichiers → Explorateur via write CF_HDROP** ← iter 1.1
+- [x] Épingler / Favoris / Tags / Catégorie
+- [x] IA locale (Ollama) : résumer / expliquer / reformuler
+
+### Storage & rétention
+- [x] SQLite WAL dans `%APPDATA%/com.clipper.app/clipper.db` (persistant)
+- [x] **Auto-suppression configurable** (jamais / 1j / 7j / 30j / 90j / 1an / custom) ← iter 1.1
+- [x] **Exclusions** : épinglés (toujours), favoris (toggle) ← iter 1.1
+- [x] **Cleanup auto toutes les heures + bouton manuel "Nettoyer maintenant"** ← iter 1.1
+- [x] Limite max d'éléments (en plus de la rétention)
+- [x] **Stats stockage temps réel dans Settings** ← iter 1.1
+- [x] **Histogramme d'activité (API exposée)** ← iter 1.1
+
+### System
+- [x] Tray icon + menu
+- [x] Raccourci global configurable (Ctrl+Shift+V)
+- [x] Single-instance
+- [x] Autostart Windows
+- [x] Hide on close (résident dans le tray)
+- [x] Bundle MSI + NSIS
 
 ## Architecture
 ```
 clipper/
-├── src/                         (Frontend)
-│   ├── App.tsx                  Layout + navigation clavier
-│   ├── components/              SearchBar, Sidebar, ClipListItem, Preview, Settings
-│   ├── lib/api.ts               Bridge typé vers commandes Tauri
-│   ├── types.ts                 Types partagés
-│   └── styles.css               Design system (ink + lime accent + grain)
-└── src-tauri/                   (Backend Rust)
-    ├── src/
-    │   ├── lib.rs               Setup tray, raccourci global, fenêtre
-    │   ├── db.rs                SQLite + FTS5 + triggers
-    │   ├── clipboard_monitor.rs Polling 500ms + classification (texte/code/url/image/fichier)
-    │   ├── ai.rs                Ollama (résumé, explication, reformulation)
-    │   ├── commands.rs          API exposée (#[tauri::command])
-    │   └── models.rs
-    ├── tauri.conf.json          Config MSI + NSIS + tray + Mica/Acrylic
-    └── icons/                   PNG + ICO multi-tailles
+├── src/                         (React + TS)
+│   ├── App.tsx                  (états filter, timeRange, sort, theme)
+│   ├── components/
+│   │   ├── SearchBar.tsx        (Ctrl F)
+│   │   ├── Sidebar.tsx          (Bibliothèque + Calendrier + Types + Catégories)
+│   │   ├── ClipListItem.tsx
+│   │   ├── Preview.tsx          (image + file list + code/text + AI)
+│   │   └── Settings.tsx         (storage stats + retention + theme + Ollama)
+│   ├── lib/api.ts               (typed Tauri bridge)
+│   ├── types.ts                 (ClipItem, Settings, TimeRange, SortMode…)
+│   └── styles.css               (CSS variables: --ink-50..950, --accent)
+└── src-tauri/
+    └── src/
+        ├── lib.rs               (setup + scheduler cleanup horaire)
+        ├── db.rs                (FTS5 + time_range_bounds + cleanup_expired + histogram)
+        ├── clipboard_monitor.rs (Files→Image→Text, write_files Windows)
+        ├── ai.rs                (Ollama health/summarize/explain/rephrase)
+        ├── commands.rs          (cleanup_now, get_histogram, …)
+        └── models.rs            (Settings.auto_delete_days, ListParams.time_range/sort)
 ```
 
-## Stockage
-- Base : `%APPDATA%/com.clipper.app/clipper.db` (SQLite + WAL)
-- FTS5 avec `unicode61 remove_diacritics 2` → recherche fluide avec/sans accents
-- Triggers AI/AD/AU maintiennent l'index automatiquement
-- Déduplication via SHA-256 (clés `t:` pour texte, `i:` pour images)
-- Settings stockées en JSON dans table `settings`
-
-## Fonctionnalités implémentées
-- [x] Historique illimité (configurable, 0 = ∞)
-- [x] Recherche plein texte FTS5 instantanée + prefix matching
-- [x] Détection auto type : texte / code (JSON, SQL, JS/TS, Rust, Python, HTML/CSS, Bash) / URL / fichier / image
-- [x] Coloration syntaxique (highlight.js)
-- [x] Aperçu image (PNG base64)
-- [x] Catégories (manuelles, édition inline)
-- [x] Tags (CSV inline)
-- [x] Épingler / Favoris
-- [x] Actions rapides : copier, trim, lower/UPPER, JSON escape, URL encode, Base64
-- [x] IA locale via Ollama : résumer / expliquer / reformuler (health-check toutes 30 s)
-- [x] Raccourci global configurable (par défaut `Ctrl+Shift+V`)
-- [x] Tray icon (clic gauche = toggle, menu = ouvrir/pause/quitter)
-- [x] Single-instance lock (relance focus l'instance)
-- [x] Démarrage avec Windows (plugin autostart)
-- [x] Hide on close (l'app reste résidente dans le tray)
-- [x] Navigation 100% clavier (↑↓ Enter Esc Ctrl+F)
-- [x] Mode clair / sombre / auto
-- [x] Window effects : Mica / Acrylic (Windows 11)
-- [x] Schema CSP strict
-- [x] Bundle MSI + NSIS configuré (FR/EN)
-
-## Marche à suivre déploiement
-Voir README.md — section "Marche à suivre — compiler un vrai installateur Windows".
-
-## Backlog / Améliorations futures (P1+)
-- [ ] Drag-and-drop d'éléments vers l'extérieur
-- [ ] Synchronisation chiffrée multi-PC (P2P, optionnelle)
-- [ ] OCR sur images copiées (tesseract local)
-- [ ] Détection de mots de passe → auto-flag "sensible" (jamais loggé)
-- [ ] Templates / snippets (insertion paramétrée)
-- [ ] Export / import CSV / JSON
-- [ ] Workflow rules (auto-tag par regex)
-
-## Décisions techniques
-- **Polling 500 ms** plutôt que listeners Win32 natifs — portable, robuste, faible coût CPU.
-- **Stockage des images en base64 dans SQLite** — simple, atomique. Pour > 100 Mo total, migrer vers blob+filesystem.
-- **Pas de telemetry/analytics** — différenciateur UX et de confiance.
-- **Plugin global-shortcut natif** — fonctionne sans privilèges admin.
-
-## Statut
-✅ **MVP complet et compilable.** Code Rust validé via `cargo check --release` (0 erreur, 0 warning). Frontend validé via `tsc --noEmit && vite build`. UI rendue OK en mode dev (screenshot validé).
-
-L'application est prête à être compilée sur une machine Windows 11 (instructions détaillées dans README.md).
+## Backlog (P1+)
+- [ ] Graph d'activité visuel basé sur `get_histogram`
+- [ ] Snippets paramétrés ({{date}}, {{cursor}})
+- [ ] OCR sur images
+- [ ] Détection auto des secrets (auto-flag sensible)
+- [ ] Drag-and-drop vers l'extérieur
+- [ ] Export/import JSON

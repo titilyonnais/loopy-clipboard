@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Search, Command } from "lucide-react";
+import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface SearchBarProps {
@@ -53,7 +53,7 @@ export function SearchBar({ value, onChange, count, className }: SearchBarProps)
         </span>
         <span className="text-ink-500">·</span>
         <kbd className="hidden sm:inline-flex items-center gap-1">
-          <Command size={9} /> F
+          Ctrl F
         </kbd>
       </div>
     </div>

@@ -150,11 +150,29 @@ impl Db {
         if p.favorites_only {
             conds.push("favorite = 1".into());
         }
+
+        // Time range filter — operates on used_at (most recent use)
+        if let Some(range) = p.time_range.as_ref().filter(|s| !s.is_empty()) {
+            if let Some((from, to)) = time_range_bounds(range) {
+                conds.push("used_at >= ? AND used_at < ?".into());
+                args.push(Box::new(from));
+                args.push(Box::new(to));
+            }
+        }
+
         if !conds.is_empty() {
             sql.push_str(" WHERE ");
             sql.push_str(&conds.join(" AND "));
         }
-        sql.push_str(" ORDER BY pinned DESC, used_at DESC");
+
+        let sort = p.sort.as_deref().unwrap_or("recent");
+        let order = match sort {
+            "popular" => " ORDER BY pinned DESC, use_count DESC, used_at DESC",
+            "oldest" => " ORDER BY pinned DESC, used_at ASC",
+            _ => " ORDER BY pinned DESC, used_at DESC",
+        };
+        sql.push_str(order);
+
         let limit = p.limit.unwrap_or(500).max(1);
         let offset = p.offset.unwrap_or(0).max(0);
         sql.push_str(&format!(" LIMIT {} OFFSET {}", limit, offset));
@@ -247,6 +265,44 @@ impl Db {
             params![max],
         )?;
         Ok(())
+    }
+
+    /// Delete entries older than `days` based on used_at. Pinned items are
+    /// always preserved. Favorites are preserved when `keep_favorites` is true.
+    /// Returns the number of deleted rows.
+    pub fn cleanup_expired(&self, days: i64, keep_favorites: bool) -> Result<usize> {
+        if days <= 0 {
+            return Ok(0);
+        }
+        let cutoff = (Utc::now() - chrono::Duration::days(days)).to_rfc3339();
+        let c = self.inner.lock();
+        let sql = if keep_favorites {
+            "DELETE FROM clips WHERE pinned = 0 AND favorite = 0 AND used_at < ?1"
+        } else {
+            "DELETE FROM clips WHERE pinned = 0 AND used_at < ?1"
+        };
+        let n = c.execute(sql, params![cutoff])?;
+        Ok(n)
+    }
+
+    /// Activity histogram: number of clips used per day for the last `days` days.
+    /// Returns a Vec of (YYYY-MM-DD, count) ordered by date ascending.
+    pub fn histogram(&self, days: i64) -> Result<Vec<(String, i64)>> {
+        let c = self.inner.lock();
+        let cutoff = (Utc::now() - chrono::Duration::days(days.max(1))).to_rfc3339();
+        let mut stmt = c.prepare(
+            "SELECT substr(used_at, 1, 10) AS day, COUNT(*)
+             FROM clips WHERE used_at >= ?1
+             GROUP BY day ORDER BY day ASC",
+        )?;
+        let rows = stmt.query_map(params![cutoff], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+        })?;
+        let mut out = vec![];
+        for r in rows {
+            out.push(r?);
+        }
+        Ok(out)
     }
 
     pub fn stats(&self) -> Result<Stats> {
@@ -389,4 +445,32 @@ fn fts_query(q: &str) -> String {
     } else {
         tokens.join(" AND ")
     }
+}
+
+
+/// Resolve a time range token to a (from_iso, to_iso) pair (UTC, half-open).
+/// Supported tokens: today, yesterday, week, month, year, or YYYY-MM-DD.
+fn time_range_bounds(range: &str) -> Option<(String, String)> {
+    use chrono::{Datelike, Duration, NaiveDate, TimeZone};
+    let now = Utc::now();
+    let today = now.date_naive();
+    let start_of_day = |d: NaiveDate| chrono::Utc.from_utc_datetime(&d.and_hms_opt(0, 0, 0).unwrap());
+
+    let (from, to) = match range {
+        "today" => (start_of_day(today), start_of_day(today + Duration::days(1))),
+        "yesterday" => (
+            start_of_day(today - Duration::days(1)),
+            start_of_day(today),
+        ),
+        "week" => (start_of_day(today - Duration::days(6)), start_of_day(today + Duration::days(1))),
+        "month" => (start_of_day(today - Duration::days(29)), start_of_day(today + Duration::days(1))),
+        "year" => (start_of_day(today - Duration::days(364)), start_of_day(today + Duration::days(1))),
+        other => {
+            // Treat as explicit YYYY-MM-DD day
+            let parsed = NaiveDate::parse_from_str(other, "%Y-%m-%d").ok()?;
+            (start_of_day(parsed), start_of_day(parsed + Duration::days(1)))
+        }
+    };
+    let _ = today.month(); // silence unused import on certain configs
+    Some((from.to_rfc3339(), to.to_rfc3339()))
 }

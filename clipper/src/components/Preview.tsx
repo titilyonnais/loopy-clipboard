@@ -187,7 +187,7 @@ export function Preview({ clip, onUpdate, onDelete, aiOnline }: Props) {
             <Copy size={12.5} /> Copier
             {copyState && <Check size={12} className="text-lime-400 ml-1" />}
           </ActionBtn>
-          {clip.kind !== "image" && (
+          {clip.kind !== "image" && clip.kind !== "file" && (
             <>
               <ActionBtn onClick={() => copyAs("trim")} testid="btn-copy-trim">
                 <TypeIcon size={12.5} /> Trim
@@ -220,7 +220,7 @@ export function Preview({ clip, onUpdate, onDelete, aiOnline }: Props) {
         </div>
 
         {/* AI actions */}
-        {clip.kind !== "image" && (
+        {clip.kind !== "image" && clip.kind !== "file" && (
           <div className="flex flex-wrap items-center gap-1.5 mt-2">
             <span className="text-[10.5px] uppercase tracking-wider text-ink-500 font-mono mr-1">
               IA locale
@@ -265,6 +265,8 @@ export function Preview({ clip, onUpdate, onDelete, aiOnline }: Props) {
               className="max-w-full max-h-full rounded-lg border border-ink-700/60 shadow-2xl"
             />
           </div>
+        ) : clip.kind === "file" ? (
+          <FileList content={clip.content} />
         ) : (
           <pre className="selectable text-ink-100 leading-relaxed whitespace-pre-wrap break-words rounded-xl bg-ink-900/60 border border-ink-700/60 p-5">
             <code
@@ -436,6 +438,42 @@ function MetaBlock({
           {value || <span className="italic text-ink-500">aucun</span>}
         </button>
       )}
+    </div>
+  );
+}
+
+
+function FileList({ content }: { content: string }) {
+  let paths: string[] = [];
+  try {
+    paths = JSON.parse(content);
+  } catch {
+    paths = content.split("\n").filter(Boolean);
+  }
+  if (!paths.length) {
+    return <div className="text-ink-400 text-[13px]">(aucun fichier)</div>;
+  }
+  return (
+    <div className="rounded-xl bg-ink-900/60 border border-ink-700/60 divide-y divide-ink-700/40 overflow-hidden">
+      {paths.map((p, i) => {
+        const name = p.split(/[\\/]/).pop() || p;
+        const dir = p.slice(0, p.length - name.length);
+        return (
+          <div
+            key={i}
+            className="px-4 py-2.5 flex items-center gap-3 hover:bg-ink-800/40 selectable"
+            data-testid={`file-row-${i}`}
+          >
+            <div className="w-8 h-8 rounded-md bg-ink-800 flex items-center justify-center text-ink-300 shrink-0">
+              📄
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-medium text-ink-50 truncate">{name}</div>
+              <div className="text-[11px] text-ink-400 font-mono truncate">{dir || p}</div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

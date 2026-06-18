@@ -39,6 +39,9 @@ base64 = "0.22"
 url = "2"
 image = "0.25"
 
+[target.'cfg(windows)'.dependencies]
+clipboard-win = "5"
+
 [profile.release]
 panic = "abort"
 codegen-units = 1
