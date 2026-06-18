@@ -42,7 +42,7 @@ export function SearchBar({ value, onChange, count, className }: SearchBarProps)
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Rechercher dans l'historique…"
+        placeholder="Rechercher…"
         className="flex-1 bg-transparent text-[15px] font-medium text-ink-50 placeholder:text-ink-400 focus:outline-none"
         data-testid="searchbar-input"
         autoFocus

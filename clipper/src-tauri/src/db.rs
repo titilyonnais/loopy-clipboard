@@ -436,6 +436,117 @@ impl Db {
         Ok(out)
     }
 
+    pub fn category_counts(&self) -> Result<Vec<(String, i64)>> {
+        let c = self.inner.lock();
+        let mut stmt = c.prepare(
+            "SELECT category, COUNT(*) FROM clips WHERE category IS NOT NULL AND category <> '' GROUP BY category ORDER BY 2 DESC, 1 ASC",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+        })?;
+        let mut out = vec![];
+        for r in rows {
+            out.push(r?);
+        }
+        Ok(out)
+    }
+
+    pub fn tag_counts(&self) -> Result<Vec<(String, i64)>> {
+        let c = self.inner.lock();
+        let mut stmt = c.prepare("SELECT tags FROM clips")?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        let mut counts: std::collections::HashMap<String, i64> =
+            std::collections::HashMap::new();
+        for r in rows {
+            let s = r?;
+            if let Ok(v) = serde_json::from_str::<Vec<String>>(&s) {
+                for t in v {
+                    *counts.entry(t).or_insert(0) += 1;
+                }
+            }
+        }
+        let mut v: Vec<(String, i64)> = counts.into_iter().collect();
+        v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        Ok(v)
+    }
+
+    pub fn rename_category(&self, old: &str, new: &str) -> Result<usize> {
+        let c = self.inner.lock();
+        let n = c.execute(
+            "UPDATE clips SET category = ?1 WHERE category = ?2",
+            params![new, old],
+        )?;
+        Ok(n)
+    }
+
+    pub fn delete_category(&self, name: &str) -> Result<usize> {
+        let c = self.inner.lock();
+        let n = c.execute(
+            "UPDATE clips SET category = NULL WHERE category = ?1",
+            params![name],
+        )?;
+        Ok(n)
+    }
+
+    pub fn rename_tag(&self, old: &str, new: &str) -> Result<usize> {
+        let c = self.inner.lock();
+        let pattern = format!("%\"{}\"%", old.replace('"', ""));
+        let mut stmt = c.prepare("SELECT id, tags FROM clips WHERE tags LIKE ?1")?;
+        let mut rows = stmt.query(params![pattern])?;
+        let mut updates: Vec<(i64, String)> = Vec::new();
+        while let Some(r) = rows.next()? {
+            let id: i64 = r.get(0)?;
+            let tags_json: String = r.get(1)?;
+            let mut tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+            let mut changed = false;
+            for t in tags.iter_mut() {
+                if t == old {
+                    *t = new.to_string();
+                    changed = true;
+                }
+            }
+            if changed {
+                tags.sort();
+                tags.dedup();
+                updates.push((id, serde_json::to_string(&tags).unwrap_or_else(|_| "[]".into())));
+            }
+        }
+        drop(rows);
+        drop(stmt);
+        let mut n = 0;
+        for (id, new_json) in updates {
+            c.execute("UPDATE clips SET tags = ?1 WHERE id = ?2", params![new_json, id])?;
+            n += 1;
+        }
+        Ok(n)
+    }
+
+    pub fn delete_tag(&self, name: &str) -> Result<usize> {
+        let c = self.inner.lock();
+        let pattern = format!("%\"{}\"%", name.replace('"', ""));
+        let mut stmt = c.prepare("SELECT id, tags FROM clips WHERE tags LIKE ?1")?;
+        let mut rows = stmt.query(params![pattern])?;
+        let mut updates: Vec<(i64, String)> = Vec::new();
+        while let Some(r) = rows.next()? {
+            let id: i64 = r.get(0)?;
+            let tags_json: String = r.get(1)?;
+            let mut tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+            let before = tags.len();
+            tags.retain(|t| t != name);
+            if tags.len() != before {
+                updates.push((id, serde_json::to_string(&tags).unwrap_or_else(|_| "[]".into())));
+            }
+        }
+        drop(rows);
+        drop(stmt);
+        let mut n = 0;
+        for (id, new_json) in updates {
+            c.execute("UPDATE clips SET tags = ?1 WHERE id = ?2", params![new_json, id])?;
+            n += 1;
+        }
+        Ok(n)
+    }
+
     /// Insert during import: skip if hash exists (don't bump use_count).
     pub fn import_clip(
         &self,

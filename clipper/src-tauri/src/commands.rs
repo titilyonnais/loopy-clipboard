@@ -114,8 +114,16 @@ pub fn delete_clip(id: i64, state: State<'_, AppState>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn clear_all(keep_pinned: bool, state: State<'_, AppState>) -> Result<usize, String> {
-    state.db.clear_all(keep_pinned).map_err(|e| e.to_string())
+pub fn clear_all(
+    keep_pinned: bool,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<usize, String> {
+    let n = state.db.clear_all(keep_pinned).map_err(|e| e.to_string())?;
+    // Notify the UI so the main list refreshes immediately, even when the
+    // Settings modal is open on top of it.
+    let _ = app.emit("clip:cleared", n);
+    Ok(n)
 }
 
 #[tauri::command]
@@ -166,6 +174,92 @@ pub fn list_tags(state: State<'_, AppState>) -> Result<Vec<String>, String> {
 #[tauri::command]
 pub fn list_languages(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     state.db.languages().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn category_counts(state: State<'_, AppState>) -> Result<Vec<(String, i64)>, String> {
+    state.db.category_counts().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn tag_counts(state: State<'_, AppState>) -> Result<Vec<(String, i64)>, String> {
+    state.db.tag_counts().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn rename_category(
+    old: String,
+    new: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<usize, String> {
+    let n = state.db.rename_category(&old, &new).map_err(|e| e.to_string())?;
+    let _ = app.emit("clip:updated", serde_json::json!({ "id": 0 }));
+    Ok(n)
+}
+
+#[tauri::command]
+pub fn delete_category(
+    name: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<usize, String> {
+    let n = state.db.delete_category(&name).map_err(|e| e.to_string())?;
+    let _ = app.emit("clip:updated", serde_json::json!({ "id": 0 }));
+    Ok(n)
+}
+
+#[tauri::command]
+pub fn rename_tag(
+    old: String,
+    new: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<usize, String> {
+    let n = state.db.rename_tag(&old, &new).map_err(|e| e.to_string())?;
+    let _ = app.emit("clip:updated", serde_json::json!({ "id": 0 }));
+    Ok(n)
+}
+
+#[tauri::command]
+pub fn delete_tag(
+    name: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<usize, String> {
+    let n = state.db.delete_tag(&name).map_err(|e| e.to_string())?;
+    let _ = app.emit("clip:updated", serde_json::json!({ "id": 0 }));
+    Ok(n)
+}
+
+#[tauri::command]
+pub async fn ai_translate(
+    id: i64,
+    target_lang: String,
+    state: State<'_, AppState>,
+) -> Result<AIResponse, String> {
+    Ok(ai::translate(state.db.clone(), id, target_lang).await)
+}
+
+#[tauri::command]
+pub async fn ai_fix_grammar(
+    id: i64,
+    state: State<'_, AppState>,
+) -> Result<AIResponse, String> {
+    Ok(ai::fix_grammar(state.db.clone(), id).await)
+}
+
+#[tauri::command]
+pub async fn ai_smart_tag(
+    id: i64,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<AIResponse, String> {
+    let res = ai::smart_tag(state.db.clone(), id).await;
+    if res.ok {
+        let _ = app.emit("clip:updated", serde_json::json!({ "id": id }));
+    }
+    Ok(res)
 }
 
 #[tauri::command]
@@ -269,9 +363,13 @@ fn spawn_open(path: &str) -> std::io::Result<()> {
 #[cfg(windows)]
 fn spawn_reveal(path: &str) -> std::io::Result<()> {
     use std::os::windows::process::CommandExt;
-    // /select, asks Explorer to open the parent folder and highlight the item.
+    // /select, requires the comma immediately followed by the (possibly quoted) path
+    // in a SINGLE command-line argument. Use raw_arg to bypass Rust's automatic
+    // quoting, which would otherwise produce `"/select," "C:\..."` and make
+    // Explorer open the default folder instead.
+    let arg = format!("/select,\"{}\"", path);
     std::process::Command::new("explorer.exe")
-        .arg(format!("/select,{}", path))
+        .raw_arg(&arg)
         .creation_flags(0x08000000)
         .spawn()
         .map(|_| ())

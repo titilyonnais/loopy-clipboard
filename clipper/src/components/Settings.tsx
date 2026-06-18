@@ -12,6 +12,8 @@ interface Props {
   onSaved: (s: SettingsT) => void;
 }
 
+const CONFIRM_WORD = "EFFACER";
+
 const DAY_PRESETS = [
   { v: 0, label: "Jamais" },
   { v: 1, label: "1 jour" },
@@ -56,6 +58,9 @@ export function Settings({ open: isOpen, onClose, onSaved }: Props) {
   const [tab, setTab] = useState<Tab>("general");
   const [cleanupResult, setCleanupResult] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<string | null>(null);
+  const [dangerOpen, setDangerOpen] = useState(false);
+  const [confirmInput, setConfirmInput] = useState("");
+  const [clearResult, setClearResult] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -337,6 +342,8 @@ export function Settings({ open: isOpen, onClose, onSaved }: Props) {
                   </div>
                 </Field>
 
+                <ProviderInfo provider={s.ai_provider} />
+
                 {s.ai_provider === "ollama" && (
                   <>
                     <Field label="URL Ollama">
@@ -588,23 +595,84 @@ export function Settings({ open: isOpen, onClose, onSaved }: Props) {
                   )}
                 </Field>
 
-                <div className="rounded-xl border border-red-500/30 bg-red-500/[0.04] p-4">
-                  <div className="text-[12px] font-medium text-red-300 mb-1">Zone dangereuse</div>
-                  <div className="text-[11.5px] text-ink-400 mb-3">
-                    Effacer tout l'historique. Les épinglés sont préservés.
+                <div className="rounded-xl border-2 border-red-500/60 bg-red-500/[0.08] p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Trash2 size={13} className="text-red-400" />
+                    <div className="text-[13px] font-semibold text-red-300">Zone dangereuse</div>
                   </div>
-                  <button
-                    onClick={async () => {
-                      if (confirm("Effacer tout l'historique (les épinglés sont préservés) ?")) {
-                        await api.clearAll(true);
-                        api.stats().then(setStats);
-                      }
-                    }}
-                    data-testid="danger-clear-all"
-                    className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-[11.5px] font-medium border border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20"
-                  >
-                    <Trash2 size={11} /> Effacer tout
-                  </button>
+                  <div className="text-[12px] text-ink-200 mb-3 leading-relaxed">
+                    Effacer tout l'historique de manière irréversible. Les éléments épinglés sont préservés sauf si vous décochez cette protection dans <span className="font-medium">Rétention</span>.
+                  </div>
+
+                  {!dangerOpen ? (
+                    <button
+                      onClick={() => {
+                        setDangerOpen(true);
+                        setConfirmInput("");
+                        setClearResult(null);
+                      }}
+                      data-testid="danger-open"
+                      className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md text-[12.5px] font-semibold bg-red-500 text-white hover:bg-red-600 border border-red-600"
+                    >
+                      <Trash2 size={12} /> Effacer tout l'historique
+                    </button>
+                  ) : (
+                    <div className="space-y-3 animate-slide-up">
+                      <div className="text-[12px] text-ink-100">
+                        Pour confirmer, tapez le mot{" "}
+                        <span className="font-mono font-bold text-red-300 select-text">
+                          {CONFIRM_WORD}
+                        </span>{" "}
+                        ci-dessous :
+                      </div>
+                      <input
+                        autoFocus
+                        value={confirmInput}
+                        onChange={(e) => setConfirmInput(e.target.value)}
+                        placeholder={CONFIRM_WORD}
+                        data-testid="danger-input"
+                        className="w-full h-10 px-3 rounded-md bg-ink-800 border-2 border-red-500/40 focus:border-red-500 text-[13px] text-ink-50 font-mono focus:outline-none"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setDangerOpen(false);
+                            setConfirmInput("");
+                          }}
+                          data-testid="danger-cancel"
+                          className="h-9 px-3 rounded-md text-[12.5px] font-medium border border-ink-700 bg-ink-800 text-ink-200 hover:bg-ink-700"
+                        >
+                          Annuler
+                        </button>
+                        <button
+                          disabled={confirmInput.trim().toUpperCase() !== CONFIRM_WORD}
+                          onClick={async () => {
+                            const n = await api.clearAll(true);
+                            setClearResult(`${n} élément(s) effacé(s).`);
+                            setDangerOpen(false);
+                            setConfirmInput("");
+                            api.stats().then(setStats);
+                            setTimeout(() => setClearResult(null), 4000);
+                          }}
+                          data-testid="danger-confirm"
+                          className={cn(
+                            "h-9 px-4 rounded-md text-[12.5px] font-semibold border",
+                            confirmInput.trim().toUpperCase() === CONFIRM_WORD
+                              ? "bg-red-500 text-white border-red-600 hover:bg-red-600"
+                              : "bg-red-500/30 text-red-200 border-red-500/40 cursor-not-allowed"
+                          )}
+                        >
+                          Confirmer l'effacement
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {clearResult && (
+                    <div className="mt-3 text-[12px] text-lime-500 animate-fade-in" data-testid="clear-result">
+                      ✓ {clearResult}
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -703,5 +771,92 @@ function ChipBtn({ active, onClick, children }: { active: boolean; onClick: () =
     >
       {children}
     </button>
+  );
+}
+
+function ProviderInfo({ provider }: { provider: "ollama" | "openai" | "anthropic" }) {
+  const info = {
+    ollama: {
+      title: "Ollama — 100% local",
+      pros: [
+        "Aucune donnée ne quitte votre PC. Vie privée totale.",
+        "Gratuit, illimité, fonctionne hors ligne.",
+        "Bon pour les tâches courantes (résumé, traduction simple).",
+      ],
+      cons: [
+        "Qualité < cloud sur tâches complexes ou techniques.",
+        "Nécessite ~4 Go RAM par modèle, plus lent (~2-15 s).",
+      ],
+      best: "Idéal pour : un usage quotidien sensible (données pro, code interne) sans connexion.",
+      color: "lime",
+    },
+    openai: {
+      title: "OpenAI GPT — équilibre qualité / vitesse",
+      pros: [
+        "GPT-4o-mini ultra rapide (< 1 s) et très peu cher (~0,15 $/M tokens).",
+        "GPT-4o très polyvalent, bon en code, raisonnement, multilingue.",
+        "Écosystème mature, support des outils & vision.",
+      ],
+      cons: [
+        "Données envoyées à OpenAI (sauf opt-out via paramètres compte).",
+        "Coûts à la requête, latence dépend de la connexion.",
+      ],
+      best: "Idéal pour : tâches rapides, code, formats structurés (JSON, SQL).",
+      color: "cyan",
+    },
+    anthropic: {
+      title: "Claude — le plus naturel à l'écrit",
+      pros: [
+        "Excelle en rédaction, raisonnement, analyse de longs textes (200k tokens).",
+        "Sortie plus longue & nuancée que GPT, ton très naturel.",
+        "Haiku 4.5 = très rapide et économique ; Sonnet/Opus = top qualité.",
+      ],
+      cons: [
+        "Données envoyées à Anthropic (opt-out via paramètres compte).",
+        "Légèrement plus lent que GPT-mini sur des prompts courts.",
+      ],
+      best: "Idéal pour : reformuler, traduire avec finesse, expliquer du code, longs documents.",
+      color: "amber",
+    },
+  }[provider];
+
+  const accentClass =
+    info.color === "lime"
+      ? "border-lime-500/40 bg-lime-500/[0.05]"
+      : info.color === "cyan"
+      ? "border-cyan-500/40 bg-cyan-500/[0.05]"
+      : "border-amber-500/40 bg-amber-500/[0.05]";
+
+  return (
+    <div className={cn("rounded-xl border p-4", accentClass)} data-testid="provider-info">
+      <div className="text-[13px] font-semibold text-ink-50 mb-2">{info.title}</div>
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <div className="text-[10.5px] uppercase tracking-wider text-lime-500 font-mono mb-1">Forces</div>
+          <ul className="space-y-1">
+            {info.pros.map((p, i) => (
+              <li key={i} className="text-[11.5px] text-ink-200 leading-relaxed flex gap-1.5">
+                <span className="text-lime-500">+</span>
+                <span>{p}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <div className="text-[10.5px] uppercase tracking-wider text-ink-400 font-mono mb-1">Limites</div>
+          <ul className="space-y-1">
+            {info.cons.map((c, i) => (
+              <li key={i} className="text-[11.5px] text-ink-300 leading-relaxed flex gap-1.5">
+                <span className="text-ink-400">−</span>
+                <span>{c}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      <div className="text-[11.5px] text-ink-100 bg-ink-800/40 rounded-md px-3 py-2 border border-ink-700/40">
+        🎯 {info.best}
+      </div>
+    </div>
   );
 }

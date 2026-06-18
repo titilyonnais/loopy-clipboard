@@ -16,6 +16,7 @@ import { ClipListItem } from "@/components/ClipListItem";
 import { Preview } from "@/components/Preview";
 import { Settings } from "@/components/Settings";
 import { AdvancedFilters, countActive } from "@/components/AdvancedFilters";
+import { CategoriesManager } from "@/components/CategoriesManager";
 import { cn } from "@/lib/utils";
 
 export default function App() {
@@ -32,6 +33,7 @@ export default function App() {
   const [categories, setCategories] = useState<string[]>([]);
   const [monitorPaused, setMonitorPaused] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [catManagerOpen, setCatManagerOpen] = useState(false);
   const [settings, setSettings] = useState<SettingsT | null>(null);
   const [aiOnline, setAiOnline] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
@@ -100,10 +102,12 @@ export default function App() {
     const un = listen<ClipItem>("clip:new", () => refresh());
     const un2 = listen<{ id: number }>("clip:updated", () => refresh());
     const un3 = listen<{}>("window:show", () => refresh());
+    const un4 = listen<number>("clip:cleared", () => refresh());
     return () => {
       un.then((f) => f());
       un2.then((f) => f());
       un3.then((f) => f());
+      un4.then((f) => f());
     };
   }, [refresh]);
 
@@ -202,8 +206,10 @@ export default function App() {
         monitorPaused={monitorPaused}
         togglePause={togglePause}
         openSettings={() => setSettingsOpen(true)}
+        openCategories={() => setCatManagerOpen(true)}
         clearAll={clearAll}
         aiOnline={aiOnline}
+        aiProvider={settings?.ai_provider || "ollama"}
       />
 
       {/* List column */}
@@ -283,6 +289,12 @@ export default function App() {
         onClose={() => setAdvOpen(false)}
         value={advFilters}
         onChange={setAdvFilters}
+      />
+
+      <CategoriesManager
+        open={catManagerOpen}
+        onClose={() => setCatManagerOpen(false)}
+        onChanged={refresh}
       />
     </div>
   );

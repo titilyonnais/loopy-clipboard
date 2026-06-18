@@ -49,6 +49,15 @@ export const api = {
   exportClips: () => invoke<string>("export_clips"),
   importClips: (json: string) => invoke<ImportResult>("import_clips", { json }),
 
+  categoryCounts: () => invoke<[string, number][]>("category_counts"),
+  tagCounts: () => invoke<[string, number][]>("tag_counts"),
+  renameCategory: (oldName: string, newName: string) =>
+    invoke<number>("rename_category", { old: oldName, new: newName }),
+  deleteCategory: (name: string) => invoke<number>("delete_category", { name }),
+  renameTag: (oldName: string, newName: string) =>
+    invoke<number>("rename_tag", { old: oldName, new: newName }),
+  deleteTag: (name: string) => invoke<number>("delete_tag", { name }),
+
   histogram: (days: number = 30) =>
     invoke<[string, number][]>("get_histogram", { days }),
 
@@ -67,5 +76,9 @@ export const api = {
   aiExplain: (id: number) => invoke<AIResponse>("ai_explain", { id }),
   aiRephrase: (id: number, style: string) =>
     invoke<AIResponse>("ai_rephrase", { id, style }),
+  aiTranslate: (id: number, targetLang: string) =>
+    invoke<AIResponse>("ai_translate", { id, targetLang }),
+  aiFixGrammar: (id: number) => invoke<AIResponse>("ai_fix_grammar", { id }),
+  aiSmartTag: (id: number) => invoke<AIResponse>("ai_smart_tag", { id }),
   aiHealth: () => invoke<AIResponse>("ai_health"),
 };

@@ -19,7 +19,7 @@ import {
   CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Stats, TimeRange, SortMode } from "@/types";
+import type { Stats, TimeRange, SortMode, AIProvider } from "@/types";
 
 export type FilterKey =
   | "all"
@@ -45,8 +45,10 @@ interface SidebarProps {
   monitorPaused: boolean;
   togglePause: () => void;
   openSettings: () => void;
+  openCategories: () => void;
   clearAll: () => void;
   aiOnline: boolean;
+  aiProvider: AIProvider;
 }
 
 const itemBase =
@@ -66,8 +68,10 @@ export function Sidebar({
   monitorPaused,
   togglePause,
   openSettings,
+  openCategories,
   clearAll,
   aiOnline,
+  aiProvider,
 }: SidebarProps) {
   const items: { key: FilterKey; label: string; icon: any; count?: number }[] = [
     { key: "all", label: "Tout", icon: Inbox, count: stats?.total },
@@ -180,7 +184,17 @@ export function Sidebar({
 
         {categories.length > 0 && (
           <div>
-            <SectionTitle>Catégories</SectionTitle>
+            <div className="flex items-center justify-between px-2">
+              <SectionTitle>Catégories</SectionTitle>
+              <button
+                onClick={openCategories}
+                data-testid="open-categories-manager"
+                title="Gérer catégories & tags"
+                className="text-ink-400 hover:text-lime-500 text-[14px] leading-none"
+              >
+                ⋯
+              </button>
+            </div>
             <div className="space-y-0.5 mt-1">
               {categories.map((cat) => (
                 <button
@@ -204,6 +218,19 @@ export function Sidebar({
             </div>
           </div>
         )}
+        {categories.length === 0 && (
+          <div>
+            <SectionTitle>Catégories</SectionTitle>
+            <button
+              onClick={openCategories}
+              data-testid="open-categories-manager-empty"
+              className={cn(itemBase, "text-ink-400 hover:text-lime-500 italic mt-1")}
+            >
+              <span className="text-[14px] leading-none">+</span>
+              <span>Créer une catégorie</span>
+            </button>
+          </div>
+        )}
       </nav>
 
       {/* Footer actions */}
@@ -216,7 +243,7 @@ export function Sidebar({
             )}
           />
           <span className="text-ink-400">
-            IA locale {aiOnline ? "en ligne" : "hors-ligne"}
+            {aiStatusLabel(aiProvider, aiOnline)}
           </span>
         </div>
         <button
@@ -246,6 +273,27 @@ export function Sidebar({
       </div>
     </aside>
   );
+}
+
+function aiStatusLabel(provider: AIProvider, online: boolean): string {
+  if (!online) {
+    switch (provider) {
+      case "openai":
+        return "OpenAI — clé manquante";
+      case "anthropic":
+        return "Claude — clé manquante";
+      default:
+        return "Ollama hors-ligne";
+    }
+  }
+  switch (provider) {
+    case "openai":
+      return "OpenAI · prêt";
+    case "anthropic":
+      return "Claude · prêt";
+    default:
+      return "Ollama local · prêt";
+  }
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {

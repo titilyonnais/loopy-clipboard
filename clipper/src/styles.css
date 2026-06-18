@@ -162,7 +162,20 @@ pre, code {
 
 /* ───────────────────────── Misc utilities ───────────────────────── */
 
+/* selectable inside content — but buttons/links keep pointer cursor */
 .selectable, .selectable * { user-select: text; cursor: text; }
+.selectable button,
+.selectable a,
+.selectable [role="button"],
+.selectable input,
+.selectable textarea {
+  cursor: pointer;
+}
+.selectable input,
+.selectable textarea {
+  cursor: text;
+  user-select: text;
+}
 
 .glass {
   background: rgb(var(--ink-900) / 0.72);

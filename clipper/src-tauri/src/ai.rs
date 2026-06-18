@@ -65,6 +65,115 @@ pub async fn rephrase(db: Arc<Db>, id: i64, style: String) -> AIResponse {
     run_on_clip(db, id, &p).await
 }
 
+pub async fn translate(db: Arc<Db>, id: i64, target_lang: String) -> AIResponse {
+    let p = format!(
+        "Traduis le texte ci-dessous en {target_lang}. Préserve le ton, le formatage et la mise en page. Réponds UNIQUEMENT avec la traduction, sans préambule ni explication."
+    );
+    run_on_clip(db, id, &p).await
+}
+
+pub async fn fix_grammar(db: Arc<Db>, id: i64) -> AIResponse {
+    run_on_clip(
+        db,
+        id,
+        "Corrige les fautes d'orthographe, de grammaire, de ponctuation et de typographie du texte ci-dessous, en conservant strictement la langue et le ton d'origine. Réponds UNIQUEMENT avec le texte corrigé, sans aucun commentaire.",
+    ).await
+}
+
+pub async fn smart_tag(db: Arc<Db>, id: i64) -> AIResponse {
+    let s = match db.get_settings() {
+        Ok(s) => s,
+        Err(e) => return err(&e.to_string()),
+    };
+    let clip = match db.get(id) {
+        Ok(Some(c)) => c,
+        Ok(None) => return err("Clip introuvable"),
+        Err(e) => return err(&e.to_string()),
+    };
+    if clip.kind == "image" {
+        return err("Pas applicable aux images.");
+    }
+    let mut content = clip.content.clone();
+    if content.len() > 4000 {
+        content.truncate(4000);
+        content.push_str("\n…(tronqué)");
+    }
+    let prompt = format!(
+        "Analyse ce contenu de presse-papiers et propose :\n\
+         1) Une CATÉGORIE courte en français (1 à 2 mots, ex: \"Travail\", \"Code SQL\", \"Recette\")\n\
+         2) 1 à 5 TAGS pertinents (mots simples en minuscules, sans espaces ni accents)\n\n\
+         Réponds STRICTEMENT en JSON valide, sans aucun autre texte :\n\
+         {{\"category\": \"...\", \"tags\": [\"...\", \"...\"]}}\n\n\
+         Contenu :\n---\n{content}\n---"
+    );
+    let resp = complete(&s, &prompt).await;
+    if !resp.ok {
+        return resp;
+    }
+
+    #[derive(serde::Deserialize)]
+    struct Suggestion {
+        #[serde(default)]
+        category: Option<String>,
+        #[serde(default)]
+        tags: Vec<String>,
+    }
+
+    let text = resp.text.trim().to_string();
+    let json_slice = match (text.find('{'), text.rfind('}')) {
+        (Some(a), Some(b)) if a <= b => &text[a..=b],
+        _ => return err("Réponse IA sans JSON identifiable."),
+    };
+    let parsed: Suggestion = match serde_json::from_str(json_slice) {
+        Ok(s) => s,
+        Err(e) => return err(&format!("Réponse IA mal formée: {}", e)),
+    };
+
+    let category = parsed
+        .category
+        .map(|c| c.trim().to_string())
+        .filter(|c| !c.is_empty());
+    let mut new_tags: Vec<String> = parsed
+        .tags
+        .into_iter()
+        .map(|t| {
+            t.trim()
+                .to_lowercase()
+                .replace(' ', "-")
+                .chars()
+                .filter(|c| c.is_alphanumeric() || matches!(c, '-' | '_'))
+                .collect::<String>()
+        })
+        .filter(|t| !t.is_empty())
+        .collect();
+
+    // Apply: merge with existing tags
+    let mut all_tags = clip.tags.clone();
+    for t in new_tags.drain(..) {
+        if !all_tags.contains(&t) {
+            all_tags.push(t);
+        }
+    }
+    if let Some(cat) = category.as_deref() {
+        let _ = db.update_category(id, Some(cat));
+    }
+    let _ = db.update_tags(id, &all_tags);
+
+    AIResponse {
+        ok: true,
+        text: format!(
+            "✓ Étiquettes appliquées :\n• Catégorie : {}\n• Tags : {}",
+            category.as_deref().unwrap_or("(aucune)"),
+            if all_tags.is_empty() {
+                "(aucun)".to_string()
+            } else {
+                all_tags.iter().map(|t| format!("#{}", t)).collect::<Vec<_>>().join(" ")
+            }
+        ),
+        error: None,
+    }
+}
+
 async fn run_on_clip(db: Arc<Db>, id: i64, instruction: &str) -> AIResponse {
     let s = match db.get_settings() {
         Ok(s) => s,

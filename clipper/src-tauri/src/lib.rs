@@ -121,6 +121,12 @@ pub fn run() {
             commands::list_categories,
             commands::list_tags,
             commands::list_languages,
+            commands::category_counts,
+            commands::tag_counts,
+            commands::rename_category,
+            commands::delete_category,
+            commands::rename_tag,
+            commands::delete_tag,
             commands::open_path,
             commands::reveal_in_folder,
             commands::export_clips,
@@ -133,6 +139,9 @@ pub fn run() {
             commands::ai_summarize,
             commands::ai_explain,
             commands::ai_rephrase,
+            commands::ai_translate,
+            commands::ai_fix_grammar,
+            commands::ai_smart_tag,
         ])
         .on_window_event(|window, event| {
             // Hide on close instead of quitting (tray app)

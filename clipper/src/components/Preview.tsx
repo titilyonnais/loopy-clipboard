@@ -18,6 +18,8 @@ import {
   FolderOpen,
   Image as ImageIcon,
   Eye,
+  Languages,
+  ChevronDown,
 } from "lucide-react";
 import { cn, humanBytes, timeAgo } from "@/lib/utils";
 import type { ClipItem, AIResponse, FileInfo } from "@/types";
@@ -103,7 +105,7 @@ export function Preview({ clip, onUpdate, onDelete, aiOnline }: Props) {
     flashCopy(`Copié (${fmt})`);
   };
 
-  const askAI = async (kind: "summarize" | "explain" | "rephrase") => {
+  const askAI = async (kind: "summarize" | "explain" | "rephrase" | "fix" | "smart_tag") => {
     setAiBusy(true);
     setAiOutput(null);
     try {
@@ -112,7 +114,24 @@ export function Preview({ clip, onUpdate, onDelete, aiOnline }: Props) {
           ? await api.aiSummarize(clip.id)
           : kind === "explain"
           ? await api.aiExplain(clip.id)
-          : await api.aiRephrase(clip.id, "professionnel et concis");
+          : kind === "rephrase"
+          ? await api.aiRephrase(clip.id, "professionnel et concis")
+          : kind === "fix"
+          ? await api.aiFixGrammar(clip.id)
+          : await api.aiSmartTag(clip.id);
+      setAiOutput(res);
+    } catch (e: any) {
+      setAiOutput({ ok: false, text: "", error: String(e) });
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  const askTranslate = async (lang: string) => {
+    setAiBusy(true);
+    setAiOutput(null);
+    try {
+      const res = await api.aiTranslate(clip.id, lang);
       setAiOutput(res);
     } catch (e: any) {
       setAiOutput({ ok: false, text: "", error: String(e) });
@@ -235,7 +254,7 @@ export function Preview({ clip, onUpdate, onDelete, aiOnline }: Props) {
         {clip.kind !== "image" && clip.kind !== "file" && (
           <div className="flex flex-wrap items-center gap-1.5 mt-2">
             <span className="text-[10.5px] uppercase tracking-wider text-ink-500 font-mono mr-1">
-              IA locale
+              IA
             </span>
             <ActionBtn
               onClick={() => askAI("summarize")}
@@ -258,9 +277,24 @@ export function Preview({ clip, onUpdate, onDelete, aiOnline }: Props) {
             >
               Reformuler
             </ActionBtn>
+            <ActionBtn
+              onClick={() => askAI("fix")}
+              disabled={aiBusy || !aiOnline}
+              testid="btn-ai-fix"
+            >
+              ✓ Corriger
+            </ActionBtn>
+            <TranslateMenu disabled={aiBusy || !aiOnline} onPick={askTranslate} />
+            <ActionBtn
+              onClick={() => askAI("smart_tag")}
+              disabled={aiBusy || !aiOnline}
+              testid="btn-ai-smart-tag"
+            >
+              <Sparkles size={12} /> Étiqueter
+            </ActionBtn>
             {!aiOnline && (
               <span className="text-[10.5px] text-ink-500 italic">
-                Ollama indisponible — voir Paramètres
+                Configurer dans Paramètres → IA
               </span>
             )}
           </div>
@@ -681,5 +715,62 @@ function Badge({
     >
       {children}
     </span>
+  );
+}
+
+
+const LANGUAGES = [
+  { v: "français", label: "Français" },
+  { v: "anglais", label: "English" },
+  { v: "espagnol", label: "Español" },
+  { v: "allemand", label: "Deutsch" },
+  { v: "italien", label: "Italiano" },
+  { v: "portugais", label: "Português" },
+  { v: "japonais", label: "日本語" },
+  { v: "chinois", label: "中文" },
+];
+
+function TranslateMenu({ disabled, onPick }: { disabled: boolean; onPick: (lang: string) => void }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (!t.closest("[data-translate-menu]")) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+  return (
+    <div className="relative" data-translate-menu>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        disabled={disabled}
+        data-testid="btn-ai-translate"
+        className={cn(
+          "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[11.5px] font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+          "bg-ink-800/70 text-ink-200 border-ink-700 hover:bg-ink-700/70 hover:text-ink-50"
+        )}
+      >
+        <Languages size={12} /> Traduire <ChevronDown size={10} className={open ? "rotate-180 transition-transform" : "transition-transform"} />
+      </button>
+      {open && (
+        <div className="absolute z-20 top-full mt-1 left-0 rounded-md border border-ink-700 bg-ink-900 shadow-2xl py-1 min-w-[160px] animate-fade-in" data-testid="translate-menu">
+          {LANGUAGES.map((l) => (
+            <button
+              key={l.v}
+              onClick={() => {
+                setOpen(false);
+                onPick(l.v);
+              }}
+              data-testid={`translate-${l.v}`}
+              className="w-full text-left px-3 py-1.5 text-[12px] text-ink-200 hover:bg-ink-800 hover:text-ink-50"
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
