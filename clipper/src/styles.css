@@ -55,21 +55,61 @@
 
 /* ───────────────────────── Customization tokens ───────────────────────── */
 
-/* Density */
-body[data-density="compact"] [data-testid^="clip-item-"] {
-  padding-top: 0.4rem;
-  padding-bottom: 0.4rem;
+/* Density — real visual difference between modes */
+body[data-density="comfortable"] {
+  --density-base-font: 13px;
+  --density-clip-py: 0.85rem;
+  --density-clip-px: 1rem;
+  --density-clip-line-clamp: 2;
+  --density-clip-gap: 0.75rem;
+  --density-search-h: 3.5rem;
+  --density-section-pad: 0.5rem;
 }
-body[data-density="comfortable"] [data-testid^="clip-item-"] {
-  padding-top: 0.85rem;
-  padding-bottom: 0.85rem;
+body[data-density="compact"] {
+  --density-base-font: 12.5px;
+  --density-clip-py: 0.4rem;
+  --density-clip-px: 0.85rem;
+  --density-clip-line-clamp: 1;
+  --density-clip-gap: 0.5rem;
+  --density-search-h: 2.5rem;
+  --density-section-pad: 0.25rem;
 }
-body[data-density="compact"] aside button {
+
+/* Clip list items respond fully to density */
+[data-testid^="clip-item-"] {
+  padding-top: var(--density-clip-py) !important;
+  padding-bottom: var(--density-clip-py) !important;
+  padding-left: var(--density-clip-px) !important;
+  padding-right: var(--density-clip-px) !important;
+}
+[data-testid^="clip-item-"] .line-clamp-2 {
+  -webkit-line-clamp: var(--density-clip-line-clamp);
+}
+[data-testid="searchbar"] {
+  height: var(--density-search-h);
+}
+
+/* Sidebar item padding scales with density */
+body[data-density="compact"] aside nav button {
   padding-top: 0.3rem;
   padding-bottom: 0.3rem;
+  font-size: 12px;
 }
-body[data-density="compact"] [data-testid="searchbar"] {
-  height: 3rem;
+body[data-density="compact"] aside nav {
+  gap: 0.75rem;
+}
+
+/* Preview pane content padding */
+body[data-density="compact"] [data-testid="preview-pane"] > div:nth-child(2) {
+  padding: 0.875rem 1rem;
+}
+body[data-density="compact"] [data-testid="preview-pane"] > div:nth-child(1) {
+  padding: 0.75rem 1rem 0.75rem;
+}
+
+/* Hide the meta footer detail in compact for visual breathing room */
+body[data-density="compact"] [data-testid^="clip-item-"] .text-\[10\.5px\] {
+  font-size: 10px;
 }
 
 /* Font family */

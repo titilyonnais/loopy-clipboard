@@ -42,6 +42,9 @@
     },
     "dialog:allow-message",
     "dialog:allow-confirm",
+    "dialog:allow-save",
+    "dialog:allow-open",
+    "dialog:default",
     "notification:default"
   ]
 }

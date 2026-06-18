@@ -290,19 +290,19 @@ export function Settings({ open: isOpen, onClose, onSaved }: Props) {
                   </div>
                 </Field>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={runCleanup}
-                    title="Force l'application de la durée de rétention ci-dessus immédiatement (sinon ça tourne automatiquement chaque heure)."
-                    className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-[11.5px] font-medium border border-ink-700 bg-ink-800 text-ink-200 hover:bg-ink-700"
+                    title="Force l'application immédiate de la durée de rétention ci-dessus (sinon ça tourne automatiquement chaque heure)."
+                    className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-[11.5px] font-medium border border-ink-700 bg-ink-800 text-ink-200 hover:bg-ink-700 whitespace-nowrap"
                     data-testid="cleanup-now"
                   >
-                    <Trash2 size={11} /> Lancer le nettoyage maintenant
+                    <Trash2 size={11} /> Nettoyer maintenant
                   </button>
                   {cleanupResult && <span className="text-[11.5px] text-lime-500" data-testid="cleanup-result">{cleanupResult}</span>}
                   {!cleanupResult && s.auto_delete_days === 0 && (
                     <span className="text-[11px] text-ink-500 italic">
-                      Activez d'abord une durée de rétention ci-dessus.
+                      Activez d'abord une durée de rétention.
                     </span>
                   )}
                 </div>

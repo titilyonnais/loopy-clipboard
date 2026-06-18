@@ -236,8 +236,8 @@ export function Sidebar({
         )}
       </nav>
 
-      {/* Footer actions */}
-      <div className="px-3 py-3 border-t border-ink-700/60 space-y-1">
+      {/* Footer — AI status only (Pause & Settings live in TitleBar to avoid duplication) */}
+      <div className="px-3 py-3 border-t border-ink-700/60">
         <div className="flex items-center gap-2 px-2 py-1.5 text-[11px]">
           <span
             className={cn(
@@ -248,23 +248,12 @@ export function Sidebar({
           <span className="text-ink-400">
             {aiStatusLabel(aiProvider, aiOnline)}
           </span>
+          {monitorPaused && (
+            <span className="ml-auto text-[10px] text-amber-400 font-mono uppercase tracking-wider">
+              en pause
+            </span>
+          )}
         </div>
-        <button
-          onClick={togglePause}
-          className={cn(itemBase, "text-ink-300 hover:bg-ink-800/60 hover:text-ink-100")}
-          data-testid="toggle-monitor"
-        >
-          {monitorPaused ? <Play size={14} /> : <Pause size={14} />}
-          <span>{monitorPaused ? "Reprendre la capture" : "Mettre en pause"}</span>
-        </button>
-        <button
-          onClick={openSettings}
-          className={cn(itemBase, "text-ink-300 hover:bg-ink-800/60 hover:text-ink-100")}
-          data-testid="open-settings"
-        >
-          <SettingsIcon size={14} />
-          <span>Paramètres</span>
-        </button>
       </div>
     </aside>
   );
