@@ -468,6 +468,7 @@ function FileList({ content }: { content: string }) {
   const [infos, setInfos] = useState<FileInfo[] | null>(null);
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [previewError, setPreviewError] = useState<Record<string, string>>({});
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     setInfos(null);
@@ -476,7 +477,6 @@ function FileList({ content }: { content: string }) {
     if (!paths.length) return;
     api.checkPaths(paths).then((res) => {
       setInfos(res);
-      // Auto-load image previews (limit to first 8 to stay snappy)
       res
         .filter((i) => i.exists && i.is_image && !i.is_dir)
         .slice(0, 8)
@@ -493,12 +493,34 @@ function FileList({ content }: { content: string }) {
     }
   };
 
+  const doOpen = async (path: string) => {
+    setActionError(null);
+    try {
+      await api.openPath(path);
+    } catch (e: any) {
+      setActionError(String(e));
+    }
+  };
+  const doReveal = async (path: string) => {
+    setActionError(null);
+    try {
+      await api.revealInFolder(path);
+    } catch (e: any) {
+      setActionError(String(e));
+    }
+  };
+
   if (!paths.length) {
     return <div className="text-ink-400 text-[13px]">(aucun fichier)</div>;
   }
 
   return (
     <div className="space-y-2" data-testid="file-list">
+      {actionError && (
+        <div className="rounded-md border border-red-500/40 bg-red-500/[0.06] text-red-300 text-[12px] px-3 py-2">
+          ⚠ {actionError}
+        </div>
+      )}
       {paths.map((p, i) => {
         const name = p.split(/[\\/]/).filter(Boolean).pop() || p;
         const dir = p.slice(0, p.length - name.length);
@@ -542,21 +564,12 @@ function FileList({ content }: { content: string }) {
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <div
-                    className={cn(
-                      "text-[13px] font-medium truncate",
-                      missing ? "text-red-300" : "text-ink-50"
-                    )}
-                  >
+                  <div className={cn("text-[13px] font-medium truncate", missing ? "text-red-300" : "text-ink-50")}>
                     {name}
                   </div>
                   {info && (
                     <Badge tone={missing ? "danger" : "neutral"}>
-                      {missing
-                        ? "introuvable"
-                        : info.is_dir
-                        ? "dossier"
-                        : humanBytes(info.size)}
+                      {missing ? "introuvable" : info.is_dir ? "dossier" : humanBytes(info.size)}
                     </Badge>
                   )}
                   {info && !missing && info.modified && (
@@ -568,6 +581,26 @@ function FileList({ content }: { content: string }) {
                 <div className="text-[11px] text-ink-400 font-mono truncate mt-0.5">
                   {dir || p}
                 </div>
+
+                {/* Quick file actions */}
+                {!missing && (
+                  <div className="flex items-center gap-1.5 mt-2">
+                    <FileActionBtn
+                      onClick={() => doOpen(p)}
+                      testid={`file-open-${i}`}
+                      icon={<ExternalLink size={11} />}
+                    >
+                      Ouvrir
+                    </FileActionBtn>
+                    <FileActionBtn
+                      onClick={() => doReveal(p)}
+                      testid={`file-reveal-${i}`}
+                      icon={<FolderOpen size={11} />}
+                    >
+                      Localiser
+                    </FileActionBtn>
+                  </div>
+                )}
 
                 {/* Image preview */}
                 {info?.is_image && !missing && (
@@ -604,6 +637,29 @@ function FileList({ content }: { content: string }) {
         );
       })}
     </div>
+  );
+}
+
+function FileActionBtn({
+  onClick,
+  testid,
+  icon,
+  children,
+}: {
+  onClick: () => void;
+  testid: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      data-testid={testid}
+      className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-[11px] font-medium border border-ink-700 bg-ink-800 text-ink-200 hover:bg-ink-700 hover:text-ink-50"
+    >
+      {icon}
+      {children}
+    </button>
   );
 }
 

@@ -136,6 +136,13 @@ impl Db {
             conds.push("kind = ?".into());
             args.push(Box::new(k.clone()));
         }
+        if let Some(kinds) = p.kinds.as_ref().filter(|v| !v.is_empty()) {
+            let placeholders = std::iter::repeat("?").take(kinds.len()).collect::<Vec<_>>().join(",");
+            conds.push(format!("kind IN ({})", placeholders));
+            for k in kinds {
+                args.push(Box::new(k.clone()));
+            }
+        }
         if let Some(cat) = p.category.as_ref().filter(|s| !s.is_empty()) {
             conds.push("category = ?".into());
             args.push(Box::new(cat.clone()));
@@ -144,11 +151,56 @@ impl Db {
             conds.push("tags LIKE ?".into());
             args.push(Box::new(format!("%\"{}\"%", tag.replace('"', ""))));
         }
+        if let Some(tags) = p.tags.as_ref().filter(|v| !v.is_empty()) {
+            for tag in tags {
+                conds.push("tags LIKE ?".into());
+                args.push(Box::new(format!("%\"{}\"%", tag.replace('"', ""))));
+            }
+        }
         if p.pinned_only {
             conds.push("pinned = 1".into());
         }
         if p.favorites_only {
             conds.push("favorite = 1".into());
+        }
+        if let Some(b) = p.has_category {
+            if b {
+                conds.push("category IS NOT NULL AND category <> ''".into());
+            } else {
+                conds.push("(category IS NULL OR category = '')".into());
+            }
+        }
+        if let Some(b) = p.has_tags {
+            if b {
+                conds.push("tags <> '[]'".into());
+            } else {
+                conds.push("tags = '[]'".into());
+            }
+        }
+        if let Some(lang) = p.language.as_ref().filter(|s| !s.is_empty()) {
+            conds.push("language = ?".into());
+            args.push(Box::new(lang.clone()));
+        }
+        if let Some(min) = p.size_min {
+            conds.push("size_bytes >= ?".into());
+            args.push(Box::new(min));
+        }
+        if let Some(max) = p.size_max {
+            conds.push("size_bytes <= ?".into());
+            args.push(Box::new(max));
+        }
+        if let Some(min) = p.use_count_min {
+            conds.push("use_count >= ?".into());
+            args.push(Box::new(min));
+        }
+        if let Some(from) = p.created_from.as_ref().filter(|s| !s.is_empty()) {
+            // Accept YYYY-MM-DD or full ISO
+            conds.push("created_at >= ?".into());
+            args.push(Box::new(normalize_date_lower(from)));
+        }
+        if let Some(to) = p.created_to.as_ref().filter(|s| !s.is_empty()) {
+            conds.push("created_at < ?".into());
+            args.push(Box::new(normalize_date_upper(to)));
         }
 
         // Time range filter — operates on created_at in the user's *local*
@@ -371,6 +423,56 @@ impl Db {
         Ok(set.into_iter().collect())
     }
 
+    pub fn languages(&self) -> Result<Vec<String>> {
+        let c = self.inner.lock();
+        let mut stmt = c.prepare(
+            "SELECT DISTINCT language FROM clips WHERE language IS NOT NULL AND language <> '' ORDER BY language ASC",
+        )?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        let mut out = vec![];
+        for r in rows {
+            out.push(r?);
+        }
+        Ok(out)
+    }
+
+    /// Insert during import: skip if hash exists (don't bump use_count).
+    pub fn import_clip(
+        &self,
+        kind: &str,
+        content: &str,
+        preview: &str,
+        language: Option<&str>,
+        category: Option<&str>,
+        tags_json: &str,
+        pinned: bool,
+        favorite: bool,
+        source_app: Option<&str>,
+        size_bytes: i64,
+        hash: &str,
+        created_at: &str,
+        used_at: &str,
+        use_count: i64,
+    ) -> Result<bool> {
+        let c = self.inner.lock();
+        let exists: Option<i64> = c
+            .query_row("SELECT id FROM clips WHERE hash = ?1", params![hash], |r| r.get(0))
+            .optional()?;
+        if exists.is_some() {
+            return Ok(false);
+        }
+        c.execute(
+            "INSERT INTO clips (kind, content, preview, language, category, tags, pinned, favorite, source_app, size_bytes, hash, created_at, used_at, use_count)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            params![
+                kind, content, preview, language, category, tags_json,
+                pinned as i64, favorite as i64, source_app, size_bytes, hash,
+                created_at, used_at, use_count
+            ],
+        )?;
+        Ok(true)
+    }
+
     // ---- Settings ----
     pub fn get_settings(&self) -> Result<Settings> {
         let c = self.inner.lock();
@@ -454,6 +556,22 @@ fn fts_query(q: &str) -> String {
     } else {
         tokens.join(" AND ")
     }
+}
+
+/// Normalize a "from" date filter (YYYY-MM-DD or ISO) to the start-of-day ISO.
+fn normalize_date_lower(s: &str) -> String {
+    if let Ok(d) = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+        return d.and_hms_opt(0, 0, 0).unwrap().and_utc().to_rfc3339();
+    }
+    s.to_string()
+}
+/// Normalize a "to" date filter (YYYY-MM-DD becomes next-day 00:00 for half-open range).
+fn normalize_date_upper(s: &str) -> String {
+    if let Ok(d) = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+        let next = d + chrono::Duration::days(1);
+        return next.and_hms_opt(0, 0, 0).unwrap().and_utc().to_rfc3339();
+    }
+    s.to_string()
 }
 
 

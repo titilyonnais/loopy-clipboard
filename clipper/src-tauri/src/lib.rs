@@ -120,6 +120,11 @@ pub fn run() {
             commands::get_stats,
             commands::list_categories,
             commands::list_tags,
+            commands::list_languages,
+            commands::open_path,
+            commands::reveal_in_folder,
+            commands::export_clips,
+            commands::import_clips,
             commands::get_settings,
             commands::set_settings,
             commands::pause_monitor,
@@ -205,13 +210,19 @@ fn toggle_main_window(app: &AppHandle, force_show: bool) {
     }
 }
 
-fn register_shortcut(app: &AppHandle, accelerator: &str) {
+pub fn register_shortcut(app: &AppHandle, accelerator: &str) {
     let gs = app.global_shortcut();
     let _ = gs.unregister_all();
-    let shortcut: Shortcut = match accelerator.parse() {
+    let accel = accelerator.trim();
+    if accel.is_empty() {
+        // Empty = explicitly disabled by user, nothing more to do.
+        log::info!("Global shortcut disabled by user");
+        return;
+    }
+    let shortcut: Shortcut = match accel.parse() {
         Ok(s) => s,
-        Err(_) => {
-            // Fallback to Ctrl+Shift+V if invalid
+        Err(e) => {
+            log::warn!("Invalid shortcut '{accel}': {e}. Falling back to Ctrl+Shift+V.");
             "Ctrl+Shift+V".parse().unwrap()
         }
     };

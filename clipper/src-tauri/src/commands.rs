@@ -164,15 +164,157 @@ pub fn list_tags(state: State<'_, AppState>) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
+pub fn list_languages(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    state.db.languages().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn open_path(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() {
+        return Err("Le fichier n'existe plus à cet emplacement.".into());
+    }
+    spawn_open(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn reveal_in_folder(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() {
+        return Err("Le fichier n'existe plus à cet emplacement.".into());
+    }
+    spawn_reveal(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn export_clips(state: State<'_, AppState>) -> Result<String, String> {
+    let params = crate::models::ListParams {
+        limit: Some(i64::MAX),
+        ..Default::default()
+    };
+    let clips = state.db.list(&params).map_err(|e| e.to_string())?;
+    let payload = serde_json::json!({
+        "app": "clipper",
+        "version": 1,
+        "exported_at": chrono::Utc::now().to_rfc3339(),
+        "count": clips.len(),
+        "clips": clips,
+    });
+    serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())
+}
+
+#[derive(serde::Serialize)]
+pub struct ImportResult {
+    pub imported: usize,
+    pub skipped: usize,
+    pub total: usize,
+}
+
+#[tauri::command]
+pub fn import_clips(json: String, state: State<'_, AppState>) -> Result<ImportResult, String> {
+    let v: serde_json::Value = serde_json::from_str(&json)
+        .map_err(|e| format!("JSON invalide: {}", e))?;
+    let clips = v
+        .get("clips")
+        .and_then(|c| c.as_array())
+        .ok_or_else(|| "Format invalide : clé 'clips' absente.".to_string())?;
+    let total = clips.len();
+    let mut imported = 0usize;
+    let mut skipped = 0usize;
+    for c in clips {
+        let hash = c.get("hash").and_then(|v| v.as_str()).unwrap_or("");
+        let content = c.get("content").and_then(|v| v.as_str()).unwrap_or("");
+        if hash.is_empty() || content.is_empty() {
+            skipped += 1;
+            continue;
+        }
+        let kind = c.get("kind").and_then(|v| v.as_str()).unwrap_or("text");
+        let preview = c.get("preview").and_then(|v| v.as_str()).unwrap_or(content);
+        let language = c.get("language").and_then(|v| v.as_str());
+        let category = c.get("category").and_then(|v| v.as_str());
+        let tags_arr = c.get("tags").cloned().unwrap_or_else(|| serde_json::json!([]));
+        let tags_json = serde_json::to_string(&tags_arr).unwrap_or_else(|_| "[]".into());
+        let pinned = c.get("pinned").and_then(|v| v.as_bool()).unwrap_or(false);
+        let favorite = c.get("favorite").and_then(|v| v.as_bool()).unwrap_or(false);
+        let source_app = c.get("source_app").and_then(|v| v.as_str());
+        let size_bytes = c.get("size_bytes").and_then(|v| v.as_i64()).unwrap_or(content.len() as i64);
+        let now = chrono::Utc::now().to_rfc3339();
+        let created_at = c.get("created_at").and_then(|v| v.as_str()).unwrap_or(&now);
+        let used_at = c.get("used_at").and_then(|v| v.as_str()).unwrap_or(created_at);
+        let use_count = c.get("use_count").and_then(|v| v.as_i64()).unwrap_or(1);
+        match state.db.import_clip(
+            kind, content, preview, language, category, &tags_json,
+            pinned, favorite, source_app, size_bytes, hash,
+            created_at, used_at, use_count,
+        ) {
+            Ok(true) => imported += 1,
+            _ => skipped += 1,
+        }
+    }
+    Ok(ImportResult { imported, skipped, total })
+}
+
+// ─── Platform-specific file actions ───
+
+#[cfg(windows)]
+fn spawn_open(path: &str) -> std::io::Result<()> {
+    use std::os::windows::process::CommandExt;
+    std::process::Command::new("cmd")
+        .args(["/C", "start", "", path])
+        .creation_flags(0x08000000) // CREATE_NO_WINDOW
+        .spawn()
+        .map(|_| ())
+}
+
+#[cfg(windows)]
+fn spawn_reveal(path: &str) -> std::io::Result<()> {
+    use std::os::windows::process::CommandExt;
+    // /select, asks Explorer to open the parent folder and highlight the item.
+    std::process::Command::new("explorer.exe")
+        .arg(format!("/select,{}", path))
+        .creation_flags(0x08000000)
+        .spawn()
+        .map(|_| ())
+}
+
+#[cfg(target_os = "macos")]
+fn spawn_open(path: &str) -> std::io::Result<()> {
+    std::process::Command::new("open").arg(path).spawn().map(|_| ())
+}
+
+#[cfg(target_os = "macos")]
+fn spawn_reveal(path: &str) -> std::io::Result<()> {
+    std::process::Command::new("open").args(["-R", path]).spawn().map(|_| ())
+}
+
+#[cfg(target_os = "linux")]
+fn spawn_open(path: &str) -> std::io::Result<()> {
+    std::process::Command::new("xdg-open").arg(path).spawn().map(|_| ())
+}
+
+#[cfg(target_os = "linux")]
+fn spawn_reveal(path: &str) -> std::io::Result<()> {
+    let p = std::path::Path::new(path);
+    let parent = p.parent().unwrap_or(p);
+    std::process::Command::new("xdg-open").arg(parent).spawn().map(|_| ())
+}
+
+#[tauri::command]
 pub fn get_settings(state: State<'_, AppState>) -> Result<Settings, String> {
     state.db.get_settings().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn set_settings(settings: Settings, state: State<'_, AppState>) -> Result<Settings, String> {
+pub fn set_settings(
+    settings: Settings,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Settings, String> {
     state.db.set_settings(&settings).map_err(|e| e.to_string())?;
     // Apply paused state immediately
     let _ = state.monitor.paused_tx.send(settings.monitor_paused);
+    // Re-register global shortcut (handles empty = disabled)
+    crate::register_shortcut(&app, &settings.shortcut);
     Ok(settings)
 }
 

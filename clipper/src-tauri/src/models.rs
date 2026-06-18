@@ -34,28 +34,56 @@ pub struct Stats {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
-    pub theme: String, // dark | light | auto
+    pub theme: String,
     pub max_items: i64,
     pub shortcut: String,
     pub launch_at_startup: bool,
     pub monitor_paused: bool,
     pub ignore_apps: Vec<String>,
-    pub ollama_url: String,
-    pub ollama_model: String,
-    /// Auto-delete items older than N days. 0 = never auto-delete.
+
+    // Retention
     #[serde(default)]
     pub auto_delete_days: i64,
-    /// When auto-deleting, keep favorites too.
     #[serde(default = "default_true")]
     pub keep_favorites: bool,
-    /// When auto-deleting, keep pinned items (recommended). User can opt out.
     #[serde(default = "default_true")]
     pub keep_pinned: bool,
+
+    // AI providers
+    #[serde(default = "default_provider")]
+    pub ai_provider: String, // "ollama" | "openai" | "anthropic"
+    pub ollama_url: String,
+    pub ollama_model: String,
+    #[serde(default)]
+    pub openai_api_key: String,
+    #[serde(default = "default_openai_base")]
+    pub openai_base_url: String,
+    #[serde(default = "default_openai_model")]
+    pub openai_model: String,
+    #[serde(default)]
+    pub anthropic_api_key: String,
+    #[serde(default = "default_anthropic_model")]
+    pub anthropic_model: String,
+
+    // Customization
+    #[serde(default = "default_accent")]
+    pub accent_color: String, // hex "#a3e635"
+    #[serde(default = "default_font")]
+    pub font_family: String, // "geist" | "inter" | "jetbrains" | "ibm-plex" | "system"
+    #[serde(default = "default_density")]
+    pub density: String, // "comfortable" | "compact"
+    #[serde(default = "default_true")]
+    pub show_grain: bool,
 }
 
-fn default_true() -> bool {
-    true
-}
+fn default_true() -> bool { true }
+fn default_provider() -> String { "ollama".into() }
+fn default_openai_base() -> String { "https://api.openai.com".into() }
+fn default_openai_model() -> String { "gpt-4o-mini".into() }
+fn default_anthropic_model() -> String { "claude-haiku-4-5-20251001".into() }
+fn default_accent() -> String { "#a3e635".into() }
+fn default_font() -> String { "geist".into() }
+fn default_density() -> String { "comfortable".into() }
 
 impl Default for Settings {
     fn default() -> Self {
@@ -66,11 +94,21 @@ impl Default for Settings {
             launch_at_startup: false,
             monitor_paused: false,
             ignore_apps: vec![],
-            ollama_url: "http://localhost:11434".into(),
-            ollama_model: "llama3.2:3b".into(),
             auto_delete_days: 0,
             keep_favorites: true,
             keep_pinned: true,
+            ai_provider: default_provider(),
+            ollama_url: "http://localhost:11434".into(),
+            ollama_model: "llama3.2:3b".into(),
+            openai_api_key: String::new(),
+            openai_base_url: default_openai_base(),
+            openai_model: default_openai_model(),
+            anthropic_api_key: String::new(),
+            anthropic_model: default_anthropic_model(),
+            accent_color: default_accent(),
+            font_family: default_font(),
+            density: default_density(),
+            show_grain: true,
         }
     }
 }
@@ -80,13 +118,21 @@ impl Default for Settings {
 pub struct ListParams {
     pub query: Option<String>,
     pub kind: Option<String>,
+    pub kinds: Option<Vec<String>>,
     pub category: Option<String>,
     pub tag: Option<String>,
+    pub tags: Option<Vec<String>>,
     pub pinned_only: bool,
     pub favorites_only: bool,
-    /// "today" | "yesterday" | "week" | "month" | "year" | "YYYY-MM-DD"
+    pub has_category: Option<bool>,
+    pub has_tags: Option<bool>,
+    pub language: Option<String>,
+    pub size_min: Option<i64>,
+    pub size_max: Option<i64>,
+    pub use_count_min: Option<i64>,
+    pub created_from: Option<String>,
+    pub created_to: Option<String>,
     pub time_range: Option<String>,
-    /// "recent" (default) | "popular" | "oldest"
     pub sort: Option<String>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,

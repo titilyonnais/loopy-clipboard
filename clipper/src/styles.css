@@ -10,7 +10,7 @@
   color-scheme: dark;
   --grain-opacity: 0.025;
 
-  /* Dark theme (default) — ascending = brighter foreground */
+  /* Dark theme (default) */
   --ink-50: 245 245 246;
   --ink-100: 229 229 231;
   --ink-200: 200 200 204;
@@ -24,38 +24,57 @@
   --ink-900: 13 13 16;
   --ink-950: 8 8 10;
 
-  --bg-base: 8 8 10;            /* body */
-  --accent: 163 230 53;         /* lime-500 */
-  --hl-stylesheet: dark;
+  --bg-base: 8 8 10;
+  /* Customizable accent (overridden at runtime). Default = lime-500. */
+  --accent-rgb: 163 230 53;
+  --accent-deep-rgb: 132 204 22; /* lime-600 for hover */
 }
 
 .light {
   color-scheme: light;
-  --grain-opacity: 0.04;
+  --grain-opacity: 0.05;
 
-  /* Light theme — palette inverted with deeper contrast for WCAG AA readability */
-  --ink-50: 9 9 11;             /* zinc-950 — primary heading */
-  --ink-100: 24 24 27;          /* zinc-900 */
-  --ink-200: 39 39 42;          /* zinc-800 — strong text */
-  --ink-300: 63 63 70;          /* zinc-700 — body / sidebar items */
-  --ink-400: 82 82 91;          /* zinc-600 — secondary labels */
-  --ink-500: 113 113 122;       /* zinc-500 — muted (timestamps, counts) ≥ 4.5:1 on white */
-  --ink-600: 161 161 170;       /* zinc-400 */
-  --ink-700: 212 212 216;       /* zinc-300 — borders */
-  --ink-800: 244 244 245;       /* zinc-100 — subtle bg / hover */
-  --ink-850: 250 250 250;
-  --ink-900: 252 252 253;       /* secondary panel */
-  --ink-950: 255 255 255;       /* primary bg */
+  /* Light theme — deeper grays for visible buttons & panels */
+  --ink-50: 9 9 11;             /* primary text */
+  --ink-100: 24 24 27;
+  --ink-200: 39 39 42;          /* strong text */
+  --ink-300: 63 63 70;          /* body */
+  --ink-400: 82 82 91;          /* secondary */
+  --ink-500: 113 113 122;       /* muted */
+  --ink-600: 161 161 170;
+  --ink-700: 200 200 206;       /* borders — slightly darker than buttons */
+  --ink-800: 224 224 230;       /* button bg / input bg */
+  --ink-850: 235 235 239;
+  --ink-900: 246 246 248;       /* panel bg */
+  --ink-950: 255 255 255;       /* body */
 
   --bg-base: 250 250 251;
-  --accent: 101 163 13;         /* lime-700 — strong contrast on white (4.6:1) */
+  --accent-rgb: 132 204 22;     /* lime-600 — better contrast on white */
+  --accent-deep-rgb: 101 163 13; /* lime-700 */
 }
+
+/* ───────────────────────── Customization tokens ───────────────────────── */
+
+/* Density */
+body.density-compact .density-y {
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+}
+body.density-comfortable .density-y {
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+}
+
+/* Font family */
+body.font-geist { font-family: "Geist", system-ui, sans-serif; }
+body.font-inter { font-family: "Inter", system-ui, sans-serif; }
+body.font-jetbrains { font-family: "JetBrains Mono", ui-monospace, monospace; }
+body.font-ibm-plex { font-family: "IBM Plex Sans", system-ui, sans-serif; }
+body.font-system { font-family: system-ui, -apple-system, sans-serif; }
 
 /* ───────────────────────── Base ───────────────────────── */
 
-html,
-body,
-#root {
+html, body, #root {
   height: 100%;
   width: 100%;
   margin: 0;
@@ -74,7 +93,6 @@ body {
   user-select: none;
 }
 
-/* Subtle grain — different blend per theme */
 body::before {
   content: "";
   position: fixed;
@@ -85,24 +103,16 @@ body::before {
   mix-blend-mode: overlay;
   z-index: 9999;
 }
-.light body::before {
-  mix-blend-mode: multiply;
-}
+body.no-grain::before { display: none; }
+.light body::before { mix-blend-mode: multiply; }
 
-/* Selection */
 ::selection {
-  background: rgb(var(--accent) / 0.28);
+  background: rgb(var(--accent-rgb) / 0.28);
   color: rgb(var(--ink-50));
 }
 
-/* Scrollbars */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
   background: rgb(var(--ink-700));
   border-radius: 6px;
@@ -115,88 +125,54 @@ body::before {
   border: 2px solid transparent;
 }
 
-input,
-textarea,
-button {
-  font-family: inherit;
-  outline: none;
-}
+input, textarea, button { font-family: inherit; outline: none; }
 
-pre,
-code {
+pre, code {
   font-family: "Geist Mono", ui-monospace, monospace;
   font-size: 12.5px;
 }
 
-.hljs {
-  background: transparent !important;
-  padding: 0 !important;
-}
+.hljs { background: transparent !important; padding: 0 !important; }
 
-/* In light mode, the lime accent is too pale on white — bump contrast for text & borders.
-   Backgrounds keep the lighter lime since they're paired with dark text (text-ink-950). */
-.light .text-lime-500,
-.light .text-lime-400 {
-  color: #3f6212; /* lime-800 — ~7.1:1 on white */
-}
-.light .border-lime-500,
-.light .border-lime-400 {
-  border-color: #65a30d; /* lime-600 */
-}
+/* ───────────────────────── Accent overrides (dynamic) ───────────────────────── */
+/* All lime-* utility classes are remapped to the current accent. */
 
-/* In light mode, swap to a light highlight scheme */
-.light .hljs {
-  color: #24292f;
-}
-.light .hljs-keyword,
-.light .hljs-tag,
-.light .hljs-built_in,
-.light .hljs-selector-tag {
-  color: #cf222e;
-}
-.light .hljs-string,
-.light .hljs-attr {
-  color: #0a3069;
-}
-.light .hljs-number,
-.light .hljs-literal,
-.light .hljs-symbol {
-  color: #0550ae;
-}
-.light .hljs-comment,
-.light .hljs-meta {
-  color: #6e7781;
-  font-style: italic;
-}
-.light .hljs-title,
-.light .hljs-name,
-.light .hljs-function {
-  color: #8250df;
-}
+.text-lime-500, .text-lime-400 { color: rgb(var(--accent-rgb)) !important; }
+.text-lime-300 { color: rgb(var(--accent-rgb) / 0.9) !important; }
+.bg-lime-500, .bg-lime-400 { background-color: rgb(var(--accent-rgb)) !important; }
+.bg-lime-300 { background-color: rgb(var(--accent-rgb) / 0.9) !important; }
+.border-lime-500, .border-lime-400 { border-color: rgb(var(--accent-rgb)) !important; }
+.fill-lime-400, .fill-lime-500 { fill: rgb(var(--accent-rgb)) !important; }
+.hover\:bg-lime-300:hover { background-color: rgb(var(--accent-rgb) / 0.9) !important; }
+.text-ink-950 { color: rgb(var(--ink-950)) !important; }
+.text-ink-900 { color: rgb(var(--ink-900)) !important; }
 
-/* selectable inside content */
-.selectable,
-.selectable * {
-  user-select: text;
-  cursor: text;
-}
+/* For light mode: stronger visible bg for /15 and /[0.04] tints */
+.light .bg-lime-400\/15 { background-color: rgb(var(--accent-rgb) / 0.18) !important; }
+.light .bg-lime-500\/15 { background-color: rgb(var(--accent-rgb) / 0.18) !important; }
+.light .bg-lime-400\/\[0\.04\] { background-color: rgb(var(--accent-rgb) / 0.08) !important; }
 
-/* Glass panels — theme aware */
+/* Light-mode highlight scheme */
+.light .hljs { color: #24292f; }
+.light .hljs-keyword, .light .hljs-tag, .light .hljs-built_in, .light .hljs-selector-tag { color: #cf222e; }
+.light .hljs-string, .light .hljs-attr { color: #0a3069; }
+.light .hljs-number, .light .hljs-literal, .light .hljs-symbol { color: #0550ae; }
+.light .hljs-comment, .light .hljs-meta { color: #6e7781; font-style: italic; }
+.light .hljs-title, .light .hljs-name, .light .hljs-function { color: #8250df; }
+
+/* ───────────────────────── Misc utilities ───────────────────────── */
+
+.selectable, .selectable * { user-select: text; cursor: text; }
+
 .glass {
   background: rgb(var(--ink-900) / 0.72);
   backdrop-filter: saturate(140%) blur(18px);
   -webkit-backdrop-filter: saturate(140%) blur(18px);
 }
-.light .glass {
-  background: rgb(255 255 255 / 0.82);
-}
+.light .glass { background: rgb(255 255 255 / 0.86); }
 
-/* Focus ring */
-.focus-ring:focus-visible {
-  box-shadow: 0 0 0 2px rgb(var(--accent) / 0.5);
-}
+.focus-ring:focus-visible { box-shadow: 0 0 0 2px rgb(var(--accent-rgb) / 0.5); }
 
-/* Keyboard hint */
 kbd {
   font-family: "Geist Mono", monospace;
   font-size: 10.5px;
@@ -209,14 +185,17 @@ kbd {
   box-shadow: 0 1px 0 rgb(var(--ink-900));
 }
 
-/* Smooth transitions for theme toggle */
+/* Long unbroken strings (base64, hex, urls) must wrap inside <pre><code>. */
+pre code, pre.selectable code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
 * {
   transition-property: background-color, border-color, color;
   transition-duration: 120ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.no-transition,
-.no-transition * {
-  transition: none !important;
-}
+.no-transition, .no-transition * { transition: none !important; }
