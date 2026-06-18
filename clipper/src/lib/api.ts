@@ -6,6 +6,7 @@ import type {
   AIResponse,
   SortMode,
   TimeRange,
+  FileInfo,
 } from "@/types";
 
 export const api = {
@@ -44,6 +45,12 @@ export const api = {
     invoke<number>("clear_all", { keepPinned: keep_pinned }),
 
   cleanupNow: () => invoke<number>("cleanup_now"),
+
+  checkPaths: (paths: string[]) =>
+    invoke<FileInfo[]>("check_paths", { paths }),
+
+  readImageB64: (path: string) =>
+    invoke<string>("read_image_b64", { path }),
 
   histogram: (days: number = 30) =>
     invoke<[string, number][]>("get_histogram", { days }),

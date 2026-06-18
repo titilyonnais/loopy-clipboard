@@ -1,6 +1,7 @@
 use crate::ai;
 use crate::clipboard_monitor::{write_files, write_image_png_b64, write_text, MonitorHandle};
 use crate::db::Db;
+use crate::files::{info_of, read_image_data_uri, FileInfo};
 use crate::models::{AIResponse, ClipItem, ListParams, Settings, Stats};
 use base64::Engine;
 use std::sync::Arc;
@@ -122,8 +123,18 @@ pub fn cleanup_now(state: State<'_, AppState>) -> Result<usize, String> {
     let s = state.db.get_settings().map_err(|e| e.to_string())?;
     state
         .db
-        .cleanup_expired(s.auto_delete_days, s.keep_favorites)
+        .cleanup_expired(s.auto_delete_days, s.keep_favorites, s.keep_pinned)
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn check_paths(paths: Vec<String>) -> Vec<FileInfo> {
+    paths.iter().map(|p| info_of(p)).collect()
+}
+
+#[tauri::command]
+pub fn read_image_b64(path: String) -> Result<String, String> {
+    read_image_data_uri(&path)
 }
 
 #[tauri::command]

@@ -2,6 +2,7 @@ mod ai;
 mod clipboard_monitor;
 mod commands;
 mod db;
+mod files;
 mod models;
 
 use crate::commands::AppState;
@@ -75,9 +76,11 @@ pub fn run() {
                     loop {
                         let cfg = db_cleanup.get_settings().unwrap_or_default();
                         if cfg.auto_delete_days > 0 {
-                            if let Ok(n) = db_cleanup
-                                .cleanup_expired(cfg.auto_delete_days, cfg.keep_favorites)
-                            {
+                            if let Ok(n) = db_cleanup.cleanup_expired(
+                                cfg.auto_delete_days,
+                                cfg.keep_favorites,
+                                cfg.keep_pinned,
+                            ) {
                                 if n > 0 {
                                     log::info!("cleaned {n} expired clip(s)");
                                 }
@@ -111,6 +114,8 @@ pub fn run() {
             commands::delete_clip,
             commands::clear_all,
             commands::cleanup_now,
+            commands::check_paths,
+            commands::read_image_b64,
             commands::get_histogram,
             commands::get_stats,
             commands::list_categories,

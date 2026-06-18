@@ -45,9 +45,12 @@ pub struct Settings {
     /// Auto-delete items older than N days. 0 = never auto-delete.
     #[serde(default)]
     pub auto_delete_days: i64,
-    /// When auto-deleting, keep favorites too (pinned items are always kept).
+    /// When auto-deleting, keep favorites too.
     #[serde(default = "default_true")]
     pub keep_favorites: bool,
+    /// When auto-deleting, keep pinned items (recommended). User can opt out.
+    #[serde(default = "default_true")]
+    pub keep_pinned: bool,
 }
 
 fn default_true() -> bool {
@@ -67,6 +70,7 @@ impl Default for Settings {
             ollama_model: "llama3.2:3b".into(),
             auto_delete_days: 0,
             keep_favorites: true,
+            keep_pinned: true,
         }
     }
 }

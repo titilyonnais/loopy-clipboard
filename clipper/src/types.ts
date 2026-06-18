@@ -41,6 +41,7 @@ export interface Settings {
   ollama_model: string;
   auto_delete_days: number;     // 0 = never
   keep_favorites: boolean;
+  keep_pinned: boolean;
 }
 
 export interface AIResponse {
@@ -51,3 +52,13 @@ export interface AIResponse {
 
 export type TimeRange = "today" | "yesterday" | "week" | "month" | "year" | null;
 export type SortMode = "recent" | "popular" | "oldest";
+
+export interface FileInfo {
+  path: string;
+  exists: boolean;
+  is_dir: boolean;
+  size: number;
+  modified: string | null;
+  is_image: boolean;
+  is_text: boolean;
+}

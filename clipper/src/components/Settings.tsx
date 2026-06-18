@@ -159,9 +159,10 @@ export function Settings({ open, onClose, onSaved }: Props) {
               <div className="space-y-2">
                 <ExclusionRow
                   label="Éléments épinglés"
-                  desc="Toujours conservés (non modifiable)."
-                  checked={true}
-                  locked
+                  desc="Conservés même au-delà de la durée de rétention (recommandé)."
+                  checked={s.keep_pinned}
+                  onChange={(v) => save({ ...s, keep_pinned: v })}
+                  testid="exclude-pinned"
                 />
                 <ExclusionRow
                   label="Favoris (★)"

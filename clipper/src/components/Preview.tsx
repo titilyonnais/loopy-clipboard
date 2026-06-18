@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import hljs from "highlight.js";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   Copy,
   Pin,
@@ -12,9 +13,14 @@ import {
   ExternalLink,
   Type as TypeIcon,
   Check,
+  AlertCircle,
+  File as FileIcon,
+  FolderOpen,
+  Image as ImageIcon,
+  Eye,
 } from "lucide-react";
 import { cn, humanBytes, timeAgo } from "@/lib/utils";
-import type { ClipItem, AIResponse } from "@/types";
+import type { ClipItem, AIResponse, FileInfo } from "@/types";
 import { api } from "@/lib/api";
 
 interface Props {
@@ -211,7 +217,13 @@ export function Preview({ clip, onUpdate, onDelete, aiOnline }: Props) {
           )}
           {clip.kind === "url" && (
             <ActionBtn
-              onClick={() => window.open(clip.content, "_blank")}
+              onClick={async () => {
+                try {
+                  await openUrl(clip.content);
+                } catch (e) {
+                  console.error("openUrl failed", e);
+                }
+              }}
               testid="btn-open"
             >
               <ExternalLink size={12.5} /> Ouvrir
@@ -444,36 +456,174 @@ function MetaBlock({
 
 
 function FileList({ content }: { content: string }) {
-  let paths: string[] = [];
-  try {
-    paths = JSON.parse(content);
-  } catch {
-    paths = content.split("\n").filter(Boolean);
-  }
+  const paths = useMemo<string[]>(() => {
+    try {
+      const v = JSON.parse(content);
+      return Array.isArray(v) ? v : [];
+    } catch {
+      return content.split("\n").filter(Boolean);
+    }
+  }, [content]);
+
+  const [infos, setInfos] = useState<FileInfo[] | null>(null);
+  const [previews, setPreviews] = useState<Record<string, string>>({});
+  const [previewError, setPreviewError] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setInfos(null);
+    setPreviews({});
+    setPreviewError({});
+    if (!paths.length) return;
+    api.checkPaths(paths).then((res) => {
+      setInfos(res);
+      // Auto-load image previews (limit to first 8 to stay snappy)
+      res
+        .filter((i) => i.exists && i.is_image && !i.is_dir)
+        .slice(0, 8)
+        .forEach((i) => loadPreview(i.path));
+    });
+  }, [paths.join("\n")]);
+
+  const loadPreview = async (path: string) => {
+    try {
+      const data = await api.readImageB64(path);
+      setPreviews((prev) => ({ ...prev, [path]: data }));
+    } catch (e: any) {
+      setPreviewError((prev) => ({ ...prev, [path]: String(e) }));
+    }
+  };
+
   if (!paths.length) {
     return <div className="text-ink-400 text-[13px]">(aucun fichier)</div>;
   }
+
   return (
-    <div className="rounded-xl bg-ink-900/60 border border-ink-700/60 divide-y divide-ink-700/40 overflow-hidden">
+    <div className="space-y-2" data-testid="file-list">
       {paths.map((p, i) => {
-        const name = p.split(/[\\/]/).pop() || p;
+        const name = p.split(/[\\/]/).filter(Boolean).pop() || p;
         const dir = p.slice(0, p.length - name.length);
+        const info = infos?.[i];
+        const preview = previews[p];
+        const err = previewError[p];
+        const missing = info ? !info.exists : false;
+
         return (
           <div
-            key={i}
-            className="px-4 py-2.5 flex items-center gap-3 hover:bg-ink-800/40 selectable"
+            key={`${p}-${i}`}
+            className={cn(
+              "rounded-xl border bg-ink-900/60 overflow-hidden selectable",
+              missing ? "border-red-500/40 bg-red-500/[0.04]" : "border-ink-700/60"
+            )}
             data-testid={`file-row-${i}`}
           >
-            <div className="w-8 h-8 rounded-md bg-ink-800 flex items-center justify-center text-ink-300 shrink-0">
-              📄
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-medium text-ink-50 truncate">{name}</div>
-              <div className="text-[11px] text-ink-400 font-mono truncate">{dir || p}</div>
+            <div className="px-4 py-3 flex items-start gap-3">
+              <div
+                className={cn(
+                  "w-9 h-9 rounded-md flex items-center justify-center shrink-0",
+                  missing
+                    ? "bg-red-500/15 text-red-400"
+                    : info?.is_dir
+                    ? "bg-amber-400/15 text-amber-400"
+                    : info?.is_image
+                    ? "bg-lime-500/15 text-lime-500"
+                    : "bg-ink-800 text-ink-300"
+                )}
+              >
+                {missing ? (
+                  <AlertCircle size={15} />
+                ) : info?.is_dir ? (
+                  <FolderOpen size={15} />
+                ) : info?.is_image ? (
+                  <ImageIcon size={15} />
+                ) : (
+                  <FileIcon size={15} />
+                )}
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div
+                    className={cn(
+                      "text-[13px] font-medium truncate",
+                      missing ? "text-red-300" : "text-ink-50"
+                    )}
+                  >
+                    {name}
+                  </div>
+                  {info && (
+                    <Badge tone={missing ? "danger" : "neutral"}>
+                      {missing
+                        ? "introuvable"
+                        : info.is_dir
+                        ? "dossier"
+                        : humanBytes(info.size)}
+                    </Badge>
+                  )}
+                  {info && !missing && info.modified && (
+                    <span className="text-[10.5px] text-ink-500 font-mono">
+                      modifié il y a {timeAgo(info.modified)}
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] text-ink-400 font-mono truncate mt-0.5">
+                  {dir || p}
+                </div>
+
+                {/* Image preview */}
+                {info?.is_image && !missing && (
+                  <div className="mt-3">
+                    {preview ? (
+                      <img
+                        src={preview}
+                        alt={name}
+                        data-testid={`file-preview-${i}`}
+                        className="max-h-64 max-w-full rounded-lg border border-ink-700/60"
+                      />
+                    ) : err ? (
+                      <div className="text-[11.5px] text-red-300">⚠ {err}</div>
+                    ) : (
+                      <button
+                        onClick={() => loadPreview(p)}
+                        className="inline-flex items-center gap-1.5 text-[11px] text-ink-400 hover:text-lime-500"
+                        data-testid={`file-load-preview-${i}`}
+                      >
+                        <Eye size={11} /> Aperçu
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {missing && (
+                  <div className="text-[11.5px] text-red-300/90 mt-1.5">
+                    Ce fichier n'existe plus à cet emplacement.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         );
       })}
     </div>
+  );
+}
+
+function Badge({
+  children,
+  tone,
+}: {
+  children: React.ReactNode;
+  tone: "neutral" | "danger";
+}) {
+  return (
+    <span
+      className={cn(
+        "text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded",
+        tone === "danger"
+          ? "bg-red-500/15 text-red-300"
+          : "bg-ink-800 text-ink-300"
+      )}
+    >
+      {children}
+    </span>
   );
 }
