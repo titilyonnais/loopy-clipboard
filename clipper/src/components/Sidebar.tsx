@@ -11,7 +11,6 @@ import {
   Pause,
   Play,
   Sparkles,
-  Trash2,
   Calendar,
   Flame,
   Sun,
@@ -19,6 +18,7 @@ import {
   CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ActivityHeatmap } from "./ActivityHeatmap";
 import type { Stats, TimeRange, SortMode, AIProvider } from "@/types";
 
 export type FilterKey =
@@ -46,7 +46,6 @@ interface SidebarProps {
   togglePause: () => void;
   openSettings: () => void;
   openCategories: () => void;
-  clearAll: () => void;
   aiOnline: boolean;
   aiProvider: AIProvider;
 }
@@ -69,7 +68,6 @@ export function Sidebar({
   togglePause,
   openSettings,
   openCategories,
-  clearAll,
   aiOnline,
   aiProvider,
 }: SidebarProps) {
@@ -111,7 +109,7 @@ export function Sidebar({
           <div className="font-display font-medium text-[15px] text-ink-50 tracking-tight">
             Clipper
           </div>
-          <div className="text-[10px] text-ink-400 font-mono">v1.0.0</div>
+          <div className="text-[10px] text-ink-400 font-mono">v1.5.0</div>
         </div>
       </div>
 
@@ -145,14 +143,19 @@ export function Sidebar({
         </div>
 
         <div>
-          <SectionTitle>Calendrier</SectionTitle>
-          <div className="space-y-0.5 mt-1">
+          <SectionTitle>Activité</SectionTitle>
+          <div className="mt-1 px-2">
+            <ActivityHeatmap
+              selectedDate={isExplicitDate(timeRange) ? timeRange : null}
+              onPick={(d) => setTimeRange(d)}
+              refreshKey={stats?.total ?? 0}
+            />
+          </div>
+          <div className="space-y-0.5 mt-2">
             {timeRanges.map((tr) => (
               <NavBtn
                 key={tr.key}
-                onClick={() =>
-                  setTimeRange(timeRange === tr.key ? null : tr.key)
-                }
+                onClick={() => setTimeRange(timeRange === tr.key ? null : tr.key)}
                 active={timeRange === tr.key}
                 icon={tr.icon}
                 label={tr.label}
@@ -255,14 +258,6 @@ export function Sidebar({
           <span>{monitorPaused ? "Reprendre la capture" : "Mettre en pause"}</span>
         </button>
         <button
-          onClick={clearAll}
-          className={cn(itemBase, "text-ink-300 hover:bg-ink-800/60 hover:text-red-400")}
-          data-testid="clear-all-btn"
-        >
-          <Trash2 size={14} />
-          <span>Effacer tout</span>
-        </button>
-        <button
           onClick={openSettings}
           className={cn(itemBase, "text-ink-300 hover:bg-ink-800/60 hover:text-ink-100")}
           data-testid="open-settings"
@@ -273,6 +268,10 @@ export function Sidebar({
       </div>
     </aside>
   );
+}
+
+function isExplicitDate(t: TimeRange): t is string {
+  return typeof t === "string" && /^\d{4}-\d{2}-\d{2}$/.test(t);
 }
 
 function aiStatusLabel(provider: AIProvider, online: boolean): string {

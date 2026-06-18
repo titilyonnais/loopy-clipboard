@@ -1,6 +1,6 @@
 [package]
 name = "clipper"
-version = "1.0.0"
+version = "1.5.0"
 description = "Clipper — Modern clipboard manager with permanent history, full-text search, categories and local AI."
 authors = ["Clipper"]
 edition = "2021"

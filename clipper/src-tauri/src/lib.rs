@@ -129,6 +129,8 @@ pub fn run() {
             commands::delete_tag,
             commands::open_path,
             commands::reveal_in_folder,
+            commands::read_text_file,
+            commands::write_text_file,
             commands::export_clips,
             commands::import_clips,
             commands::get_settings,

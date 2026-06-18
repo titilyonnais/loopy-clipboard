@@ -45,6 +45,9 @@ export const api = {
   readImageB64: (path: string) => invoke<string>("read_image_b64", { path }),
   openPath: (path: string) => invoke<void>("open_path", { path }),
   revealInFolder: (path: string) => invoke<void>("reveal_in_folder", { path }),
+  readTextFile: (path: string) => invoke<string>("read_text_file", { path }),
+  writeTextFile: (path: string, content: string) =>
+    invoke<void>("write_text_file", { path, content }),
 
   exportClips: () => invoke<string>("export_clips"),
   importClips: (json: string) => invoke<ImportResult>("import_clips", { json }),

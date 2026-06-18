@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X, RotateCcw, Check, Database, Trash2, Cpu, Palette, Keyboard, Download, Upload, Sparkles } from "lucide-react";
+import { X, RotateCcw, Check, Database, Trash2, Cpu, Palette, Keyboard, Download, Upload, Sparkles, FileText, Shield } from "lucide-react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { api } from "@/lib/api";
 import type { Settings as SettingsT, Stats, AIProvider } from "@/types";
@@ -49,7 +49,7 @@ const ANTHROPIC_MODELS = [
   "claude-opus-4-5",
 ];
 
-type Tab = "general" | "retention" | "ai" | "shortcut" | "appearance" | "data";
+type Tab = "general" | "retention" | "ai" | "shortcut" | "appearance" | "data" | "about";
 
 export function Settings({ open: isOpen, onClose, onSaved }: Props) {
   const [s, setS] = useState<SettingsT | null>(null);
@@ -94,22 +94,14 @@ export function Settings({ open: isOpen, onClose, onSaved }: Props) {
       filters: [{ name: "JSON", extensions: ["json"] }],
     });
     if (!path) return;
-    // Use Tauri fs via dialog's open isn't direct — write via JS-only fallback using a Blob isn't available in Tauri.
-    // The simplest path here: use the dialog plugin's save to get a path, then write via a small Rust command? We didn't expose that.
-    // Workaround: copy JSON to clipboard so user pastes into a file. But that's poor UX.
-    // Better: pop a textarea modal with the JSON for copy/save. We'll do that.
-    // For now, embed an invisible anchor download using a data URL — works inside webview.
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = path.split(/[\\/]/).pop() || "clipper-export.json";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    setImportResult(`Export prêt: ${a.download}`);
-    setTimeout(() => setImportResult(null), 3500);
+    try {
+      await api.writeTextFile(path, json);
+      const name = path.split(/[\\/]/).pop() || path;
+      setImportResult(`✓ Exporté vers ${name}`);
+    } catch (e: any) {
+      setImportResult(`Erreur: ${String(e)}`);
+    }
+    setTimeout(() => setImportResult(null), 4500);
   };
 
   const doImport = async () => {
@@ -119,35 +111,17 @@ export function Settings({ open: isOpen, onClose, onSaved }: Props) {
       filters: [{ name: "JSON", extensions: ["json"] }],
     });
     if (!selected || typeof selected !== "string") return;
-    // Read file via input fallback (Tauri 2 fs plugin not configured) — use a Rust roundtrip:
-    // We don't have a read_text command. Easiest: ask the user to drop the file via a <input type=file>.
-    // To avoid adding a Rust command, we use the File System Access via the dialog OUTPUT path then read in Rust.
-    // Actually our import_clips takes JSON string directly, so we DO need to read the file content.
-    // Workaround: use fetch with file:// — disallowed by CSP. Use the readFile from @tauri-apps/plugin-fs.
-    // Since we don't have fs plugin set up, we fallback to a hidden <input type=file>.
-    triggerFileInput();
-  };
-
-  const triggerFileInput = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "application/json,.json";
-    input.onchange = async () => {
-      const f = input.files?.[0];
-      if (!f) return;
-      const text = await f.text();
-      try {
-        const res = await api.importClips(text);
-        setImportResult(
-          `Import: ${res.imported} ajouté(s), ${res.skipped} ignoré(s) sur ${res.total}.`
-        );
-        api.stats().then(setStats);
-      } catch (e: any) {
-        setImportResult(`Erreur: ${String(e)}`);
-      }
-      setTimeout(() => setImportResult(null), 5500);
-    };
-    input.click();
+    try {
+      const content = await api.readTextFile(selected);
+      const res = await api.importClips(content);
+      setImportResult(
+        `✓ Import: ${res.imported} ajouté(s), ${res.skipped} ignoré(s) sur ${res.total}.`
+      );
+      api.stats().then(setStats);
+    } catch (e: any) {
+      setImportResult(`Erreur: ${String(e)}`);
+    }
+    setTimeout(() => setImportResult(null), 5500);
   };
 
   const tabs: { v: Tab; label: string; icon: any }[] = [
@@ -157,6 +131,7 @@ export function Settings({ open: isOpen, onClose, onSaved }: Props) {
     { v: "shortcut", label: "Raccourci", icon: Keyboard },
     { v: "appearance", label: "Apparence", icon: Palette },
     { v: "data", label: "Données", icon: Download },
+    { v: "about", label: "À propos", icon: Shield },
   ];
 
   return (
@@ -231,10 +206,18 @@ export function Settings({ open: isOpen, onClose, onSaved }: Props) {
                   </div>
                 )}
 
-                <Field label="Limite d'historique" hint="0 = illimité. Les épinglés ne sont jamais comptés.">
+                <Field
+                  label="Plafond d'éléments (filet de sécurité)"
+                  hint={
+                    s.max_items === 0
+                      ? "Désactivé. L'historique peut grandir indéfiniment. Combiné à une durée de rétention, ce plafond garantit que la base ne dépassera jamais cette taille même en cas de pic d'activité."
+                      : `Au-delà de ${s.max_items.toLocaleString()} clips, les plus anciens (non épinglés) seront supprimés en plus de la rétention par date. Mettre 0 pour désactiver.`
+                  }
+                >
                   <input
                     type="number"
                     min={0}
+                    step={100}
                     value={s.max_items}
                     onChange={(e) => setS({ ...s, max_items: parseInt(e.target.value) || 0 })}
                     onBlur={() => save_(s)}
@@ -310,12 +293,18 @@ export function Settings({ open: isOpen, onClose, onSaved }: Props) {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={runCleanup}
+                    title="Force l'application de la durée de rétention ci-dessus immédiatement (sinon ça tourne automatiquement chaque heure)."
                     className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-[11.5px] font-medium border border-ink-700 bg-ink-800 text-ink-200 hover:bg-ink-700"
                     data-testid="cleanup-now"
                   >
-                    <Trash2 size={11} /> Nettoyer maintenant
+                    <Trash2 size={11} /> Lancer le nettoyage maintenant
                   </button>
                   {cleanupResult && <span className="text-[11.5px] text-lime-500" data-testid="cleanup-result">{cleanupResult}</span>}
+                  {!cleanupResult && s.auto_delete_days === 0 && (
+                    <span className="text-[11px] text-ink-500 italic">
+                      Activez d'abord une durée de rétention ci-dessus.
+                    </span>
+                  )}
                 </div>
               </>
             )}
@@ -677,6 +666,49 @@ export function Settings({ open: isOpen, onClose, onSaved }: Props) {
               </>
             )}
 
+            {tab === "about" && (
+              <div className="space-y-5">
+                <div className="flex items-center gap-3 pb-3 border-b border-ink-700/60">
+                  <div className="w-10 h-10 rounded-lg bg-lime-500 flex items-center justify-center shadow-[0_0_24px_-4px_rgba(190,242,100,0.6)]">
+                    <Sparkles size={18} className="text-ink-950" strokeWidth={2.5} />
+                  </div>
+                  <div>
+                    <div className="font-display text-[16px] font-medium text-ink-50">Clipper</div>
+                    <div className="text-[11.5px] text-ink-400 font-mono">Version 1.5.0 · MIT License</div>
+                  </div>
+                </div>
+
+                <LegalSection icon={Shield} title="Vie privée">
+                  Toutes vos données sont stockées <strong className="text-ink-50">uniquement sur votre appareil</strong> dans <code className="text-lime-500 font-mono">%APPDATA%/com.clipper.app/</code>. Aucune télémétrie, aucun tracking, aucun envoi automatique de données.
+                  <br /><br />
+                  Lorsque vous utilisez <strong>OpenAI</strong> ou <strong>Anthropic Claude</strong>, le contenu du clip sélectionné est envoyé directement au fournisseur correspondant via HTTPS, avec votre propre clé API. <strong>Aucun intermédiaire.</strong> Avec <strong>Ollama</strong>, tout reste 100 % local.
+                </LegalSection>
+
+                <LegalSection icon={FileText} title="Conditions d'utilisation">
+                  Clipper est fourni « tel quel », sans aucune garantie expresse ou implicite. L'auteur ne peut être tenu responsable des pertes de données, dommages ou utilisations abusives.
+                  <br /><br />
+                  Vous êtes responsable du contenu copié et stocké. N'utilisez pas Clipper pour conserver des données soumises à des obligations spécifiques (RGPD strict, données de santé, secrets bancaires) sans mesures de chiffrement complémentaires.
+                </LegalSection>
+
+                <LegalSection icon={Shield} title="RGPD / CCPA">
+                  • <strong className="text-ink-50">Droit d'accès :</strong> bouton « Exporter » dans Données → fichier JSON complet.<br />
+                  • <strong className="text-ink-50">Droit à l'oubli :</strong> bouton « Effacer tout » + suppression du dossier <code className="font-mono">%APPDATA%/com.clipper.app/</code>.<br />
+                  • <strong className="text-ink-50">Portabilité :</strong> format JSON standard, déduplication par SHA-256.<br />
+                  • <strong className="text-ink-50">Aucun responsable de traitement externe</strong> (sauf si vous utilisez OpenAI/Claude — voir leurs politiques respectives).
+                </LegalSection>
+
+                <LegalSection icon={FileText} title="Licences open source">
+                  Construit avec : Tauri, Rust, React, TypeScript, Tailwind CSS, SQLite, rusqlite, arboard, clipboard-win, reqwest, highlight.js, lucide-react, date-fns, framer-motion.
+                  <br /><br />
+                  Toutes ces dépendances sont sous licences open-source compatibles (MIT, Apache 2.0, ISC, BSD).
+                </LegalSection>
+
+                <div className="text-[10.5px] text-ink-500 font-mono pt-3 border-t border-ink-700/60">
+                  © 2026 Clipper. Logiciel libre sous licence MIT.
+                </div>
+              </div>
+            )}
+
             <div className="pt-3 border-t border-ink-700/60 flex items-center gap-2">
               <RotateCcw size={11} className="text-ink-500" />
               <span className="text-[11px] text-ink-500">
@@ -771,6 +803,26 @@ function ChipBtn({ active, onClick, children }: { active: boolean; onClick: () =
     >
       {children}
     </button>
+  );
+}
+
+function LegalSection({
+  icon: Icon,
+  title,
+  children,
+}: {
+  icon: any;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-ink-700/60 bg-ink-800/30 p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Icon size={13} className="text-lime-500" />
+        <div className="text-[13px] font-semibold text-ink-50">{title}</div>
+      </div>
+      <div className="text-[12px] text-ink-200 leading-relaxed">{children}</div>
+    </div>
   );
 }
 

@@ -68,7 +68,7 @@ export interface AIResponse {
   error?: string;
 }
 
-export type TimeRange = "today" | "yesterday" | "week" | "month" | "year" | null;
+export type TimeRange = "today" | "yesterday" | "week" | "month" | "year" | string | null;
 export type SortMode = "recent" | "popular" | "oldest";
 
 export interface FileInfo {

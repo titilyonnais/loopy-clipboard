@@ -17,6 +17,7 @@ import { Preview } from "@/components/Preview";
 import { Settings } from "@/components/Settings";
 import { AdvancedFilters, countActive } from "@/components/AdvancedFilters";
 import { CategoriesManager } from "@/components/CategoriesManager";
+import { TitleBar } from "@/components/TitleBar";
 import { cn } from "@/lib/utils";
 
 export default function App() {
@@ -169,11 +170,35 @@ export default function App() {
     await api.pauseMonitor(next);
     if (settings) setSettings({ ...settings, monitor_paused: next });
   };
+
+  const focusSearch = () => {
+    const el = document.querySelector<HTMLInputElement>('[data-testid="searchbar-input"]');
+    el?.focus();
+    el?.select();
+  };
+
+  const aiProviderLabel = useMemo(() => {
+    if (!settings) return "IA";
+    if (!aiOnline) {
+      switch (settings.ai_provider) {
+        case "openai": return "OpenAI off";
+        case "anthropic": return "Claude off";
+        default: return "Ollama off";
+      }
+    }
+    switch (settings.ai_provider) {
+      case "openai": return "OpenAI";
+      case "anthropic": return "Claude";
+      default: return "Ollama";
+    }
+  }, [settings?.ai_provider, aiOnline]);
   const clearAll = async () => {
     if (!confirm("Effacer tout l'historique (les épinglés sont préservés) ?")) return;
     await api.clearAll(true);
     refresh();
   };
+  void clearAll;
+
 
   const activeFilterLabel = useMemo(() => {
     if (timeRange) {
@@ -191,7 +216,17 @@ export default function App() {
   }, [timeRange, sort]);
 
   return (
-    <div className="h-screen w-screen flex overflow-hidden bg-ink-950" data-testid="app-root">
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-ink-950" data-testid="app-root">
+      <TitleBar
+        monitorPaused={monitorPaused}
+        togglePause={togglePause}
+        openSettings={() => setSettingsOpen(true)}
+        focusSearch={focusSearch}
+        count={stats?.total ?? 0}
+        aiOnline={aiOnline}
+        aiProviderLabel={aiProviderLabel}
+      />
+      <div className="flex-1 flex overflow-hidden">
       <Sidebar
         filter={filter}
         setFilter={setFilter}
@@ -207,7 +242,6 @@ export default function App() {
         togglePause={togglePause}
         openSettings={() => setSettingsOpen(true)}
         openCategories={() => setCatManagerOpen(true)}
-        clearAll={clearAll}
         aiOnline={aiOnline}
         aiProvider={settings?.ai_provider || "ollama"}
       />
@@ -296,6 +330,7 @@ export default function App() {
         onClose={() => setCatManagerOpen(false)}
         onChanged={refresh}
       />
+      </div>
     </div>
   );
 }
@@ -327,12 +362,10 @@ function applyCustomization(s: { accent_color: string; font_family: string; dens
   const root = document.documentElement;
   const [r, g, b] = hexToRgb(s.accent_color) || [163, 230, 53];
   root.style.setProperty("--accent-rgb", `${r} ${g} ${b}`);
-  // Body classes
   const body = document.body;
   body.classList.remove("font-geist", "font-inter", "font-jetbrains", "font-ibm-plex", "font-system");
   body.classList.add(`font-${s.font_family}`);
-  body.classList.remove("density-comfortable", "density-compact");
-  body.classList.add(`density-${s.density}`);
+  body.setAttribute("data-density", s.density);
   body.classList.toggle("no-grain", !s.show_grain);
 }
 

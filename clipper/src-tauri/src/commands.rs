@@ -263,6 +263,29 @@ pub async fn ai_smart_tag(
 }
 
 #[tauri::command]
+pub fn read_text_file(path: String) -> Result<String, String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() {
+        return Err("Fichier introuvable.".into());
+    }
+    if let Ok(meta) = p.metadata() {
+        // Hard cap at 50 MB to avoid hanging on huge files.
+        if meta.len() > 50 * 1024 * 1024 {
+            return Err("Fichier trop volumineux (max 50 Mo).".into());
+        }
+    }
+    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn write_text_file(path: String, content: String) -> Result<(), String> {
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn open_path(path: String) -> Result<(), String> {
     let p = std::path::Path::new(&path);
     if !p.exists() {
