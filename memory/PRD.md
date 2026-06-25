@@ -86,3 +86,8 @@ clipper/
 - [ ] Détection auto des secrets (auto-flag sensible)
 - [ ] Drag-and-drop vers l'extérieur
 - [ ] Export/import JSON
+
+## Iteration 1.7 — UX lancement Windows (2026-02)
+- [x] `launch_at_startup` désormais relié au plugin autostart (enable/disable sur l'OS quand le toggle change + sync au démarrage)
+- [x] Fenêtre affichée au premier plan au lancement manuel ; reste cachée si lancée via Windows (flag `--minimized`)
+- [x] `skipTaskbar: true` → un seul logo (system tray uniquement), plus de doublon dans la barre des tâches

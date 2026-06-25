@@ -6,6 +6,7 @@ use crate::models::{AIResponse, ClipItem, ListParams, Settings, Stats};
 use base64::Engine;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
 
 pub struct AppState {
     pub db: Arc<Db>,
@@ -436,6 +437,15 @@ pub fn set_settings(
     let _ = state.monitor.paused_tx.send(settings.monitor_paused);
     // Re-register global shortcut (handles empty = disabled)
     crate::register_shortcut(&app, &settings.shortcut);
+    // Sync OS-level autostart with the new setting
+    let autostart = app.autolaunch();
+    if settings.launch_at_startup {
+        if let Err(e) = autostart.enable() {
+            log::warn!("Failed to enable autostart: {e}");
+        }
+    } else if let Err(e) = autostart.disable() {
+        log::warn!("Failed to disable autostart: {e}");
+    }
     Ok(settings)
 }
 

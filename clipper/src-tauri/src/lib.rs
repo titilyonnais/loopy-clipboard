@@ -13,6 +13,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager,
 };
+use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -34,7 +35,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            None,
+            Some(vec!["--minimized"]),
         ))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build());
 
@@ -91,11 +92,26 @@ pub fn run() {
                 });
             }
 
-            // First-launch UX: show window if no history yet
+            // Sync OS-level autostart with stored setting (in case user changed
+            // it while app was not running, or first launch).
+            let autostart = app.autolaunch();
+            match autostart.is_enabled() {
+                Ok(enabled) if enabled != settings.launch_at_startup => {
+                    if settings.launch_at_startup {
+                        let _ = autostart.enable();
+                    } else {
+                        let _ = autostart.disable();
+                    }
+                }
+                _ => {}
+            }
+
+            // Show window unless launched silently via autostart (--minimized).
+            let started_minimized = std::env::args().any(|a| a == "--minimized");
             if let Some(w) = app.get_webview_window("main") {
-                let total: i64 = db.stats().map(|s| s.total).unwrap_or(0);
-                if total == 0 {
+                if !started_minimized {
                     let _ = w.show();
+                    let _ = w.unminimize();
                     let _ = w.set_focus();
                 }
             }
